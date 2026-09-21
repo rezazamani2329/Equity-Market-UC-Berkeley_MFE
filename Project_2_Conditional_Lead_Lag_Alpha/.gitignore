@@ -1,0 +1,23 @@
+# --- Part 1 (data & universe) ---------------------------------------------
+# This repository is PUBLIC.  Nothing derived from CRSP or Databento at the
+# security level belongs in it: those are subscriber-licensed, and
+# redistributing them breaches the WRDS and Databento agreements.  Aggregate
+# statistics (the .csv tables in results/) are fine; stock-level panels are
+# not.  Everything is reproducible with `python scripts/run_part1.py`.
+cache.nosync/
+data.nosync/
+*.parquet
+*.dbn
+*.dbn.zst
+
+# Credentials — never commit the filled-in .env
+.env
+.pgpass
+
+.venv*
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+*.egg-info/
+.DS_Store

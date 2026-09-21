@@ -1,0 +1,18 @@
+# 230GA Project 2 — pinned loosely; install with
+#   uv pip install --python .venv.nosync/bin/python -r requirements.txt
+numpy
+scipy
+pandas
+pyarrow        # parquet engine for the WRDS cache
+matplotlib
+statsmodels    # panel regressions, Newey-West / clustered standard errors
+wrds
+jupyter
+ipykernel
+python-dotenv
+requests       # Ken French industry-definition download
+pytest
+pyright
+
+# the project itself, editable
+-e .

@@ -1,0 +1,20 @@
+[project]
+name = "lead_lag"
+version = "0.1.0"
+description = "Conditional lead-lag alpha: a risk-constrained long-short equity strategy (Berkeley MFE 230GA, Project 2)"
+requires-python = ">=3.12"
+dependencies = []          # runtime deps are pinned in requirements.txt for the uv env
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "live: hits WRDS or the Ken French library; skip offline with -m 'not live'",
+    "slow: full-sample daily pulls (minutes); skip with -m 'not slow'",
+]
