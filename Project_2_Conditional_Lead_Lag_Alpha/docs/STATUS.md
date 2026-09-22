@@ -1,6 +1,6 @@
 # Project status — data & universe (Part 1)
 
-**Last updated:** 2026-09-20 · **Owner:** Elias Roubache (part 1)
+**Last updated:** 2026-09-21 · **Owner:** Elias Roubache (part 1)
 
 Read this first if you are picking up parts 2–5. It says what exists, what it
 means, what you can start on now, and what is not settled.
@@ -23,8 +23,19 @@ change what a good result looks like:
    the sign for free.
 2. **The daily effect is confined to 1996–2006.** From 2007 it oscillates
    around zero. Over the same period median relative spread fell from 3.23% to
-   0.11%. Those two facts together are the biggest threat to the whole thesis
-   and every result should be reported split at 2007.
+   0.11%. Report every result split at 2007.
+
+3. **It is NOT bid-ask bounce — tested and cleared.** Rebuilding the panel on
+   bid-ask midpoint returns (which do not bounce), holding universe, leaders
+   and dates fixed, leaves the coefficient unchanged: 0.00963 / t 5.19 versus
+   0.00928 / t 5.03 on closes. Bounce is present and large in the close
+   series (first-order autocorrelation −0.206 in 1996, −0.012 in 2024) and
+   absent from midpoints — so the test detects it, it just is not what drives
+   the cross-stock effect. Makes sense in hindsight: bounce contaminates a
+   stock's OWN autocorrelation, and `own_lag` is already a control.
+
+   **Non-synchronous trading is not cleared** and is the remaining
+   microstructure threat. It needs the intraday data.
 
 ---
 
@@ -96,6 +107,21 @@ standalone); the price screen is next (24%).
 opposite to the daily result, but one month of 22 symbols is not evidence.
 The pilot's purpose was to prove the pipeline, and it did: the minute grid is
 genuinely synchronised (median 22 symbols per minute, min 20, max 22).
+
+**Bounce robustness** — `results/p1_bounce_check.csv`,
+`p1_bounce_exposure.csv`, `p1_autocorr_close_vs_mid.csv`. The table that
+answers the biggest threat to the thesis; see finding 3 above.
+
+| Return measure | lag 1 β_FM | t | 1996–2006 | 2007–2024 |
+|---|---|---|---|---|
+| close-to-close | 0.00928 | 5.03 | 0.02062 (t 7.97) | 0.00246 (t 1.02) |
+| close ex-div | 0.00912 | 4.96 | 0.02064 (t 7.97) | 0.00221 (t 0.92) |
+| **midpoint** | **0.00963** | **5.19** | **0.02200 (t 8.12)** | 0.00222 (t 0.93) |
+
+**Intraday data quality** — `results/p1_intraday_data_condition.csv`. Across
+2018-05→2024-12, 29 degraded venue-days out of 5,223 (0.55%): XNAS 3, XNYS 7,
+XASE 19. Good enough that no date filter is warranted, but the list is there
+for the appendix.
 
 ---
 
@@ -215,9 +241,10 @@ a shared drive.
 - **ETF ownership is not sourced.** It is the sharpest conditioning variable
   in the research design and Databento cannot supply it — it needs 13F
   holdings or ETF constituent files. Next on my list.
-- **Full intraday pull not started.** Sized at 54.6 GB for `bbo-1m` over
-  2018-05→2024-12 (XNAS.ITCH 18.6, XNYS.PILLAR 35.9, XASE.PILLAR 0.1); cost is
-  zero on this account's plan. Pilot passed; awaiting the go-ahead.
+- **Full intraday pull RUNNING** (started 2026-09-21). `bbo-1m`, 1,209
+  symbols, 2018-05→2024-12, chunked by venue-year so it is resumable. DBN
+  compresses to ~30–49% of billable, so ~18 GB on disk rather than 54.6 GB.
+  Progress in `results/p1_intraday_pull_log.csv`.
 - **Venue caveat.** The 2018+ datasets are per-venue books, not consolidated
   NBBO. Validation overlay against `DBEQ.BASIC` (2023+) is part 5's.
 - **The assignment PDF in `assignment/` is the 2025 edition** and states a
@@ -237,3 +264,14 @@ compounding) and re-pulled CRSP with `cfacpr`/`quote_only`. Built the
 Databento bridge and piloted the intraday leg on 3 industries × June 2023:
 pipeline validated, result not significant. Fixed a `cfacpr` direction error
 that would have turned every stock split into a −75% midpoint return.
+
+**2026-09-21** — CRSP v2 re-pull completed (34,413,210 rows, `cfacpr` 100%,
+`quote_only` 3.95%), which unlocked the bounce test. **The lead-lag effect
+survives on bid-ask midpoint returns**: 0.00963 / t 5.19 against 0.00928 /
+t 5.03 on closes, and 0.02200 / t 8.12 against 0.02062 / t 7.97 in 1996–2006.
+Bounce is present and large in the close series and absent from midpoints, so
+the test works — it simply is not what drives the cross-stock coefficient.
+The pre-2007 effect is genuine information diffusion and the post-2007
+disappearance is genuine too, which makes "did it migrate to intraday
+horizons?" the central question rather than a side one. Started the full
+intraday pull. Logged Databento data conditions (0.55% degraded venue-days).
