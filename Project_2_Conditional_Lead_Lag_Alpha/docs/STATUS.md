@@ -1,6 +1,6 @@
 # Project status — data & universe (Part 1)
 
-**Last updated:** 2026-09-21 · **Owner:** Elias Roubache (part 1)
+**Last updated:** 2026-09-22 · **Owner:** Elias Roubache (part 1)
 
 Read this first if you are picking up parts 2–5. It says what exists, what it
 means, what you can start on now, and what is not settled.
@@ -241,10 +241,19 @@ a shared drive.
 - **ETF ownership is not sourced.** It is the sharpest conditioning variable
   in the research design and Databento cannot supply it — it needs 13F
   holdings or ETF constituent files. Next on my list.
-- **Full intraday pull RUNNING** (started 2026-09-21). `bbo-1m`, 1,209
-  symbols, 2018-05→2024-12, chunked by venue-year so it is resumable. DBN
-  compresses to ~30–49% of billable, so ~18 GB on disk rather than 54.6 GB.
-  Progress in `results/p1_intraday_pull_log.csv`.
+- **Full intraday pull COMPLETE** (2026-09-22). `bbo-1m`, 1,209 symbols,
+  2018-05→2024-12, all 21 venue-year chunks, **28.2 GB** in
+  `cache.nosync/databento/`. Log: `results/p1_intraday_pull_log.csv`.
+
+  **Processing constraint for parts 2–3:** one venue-year chunk is ~3 GB and
+  decodes to ~69M records, taking ~5 minutes to read. The sample cannot be
+  loaded whole — process chunk-wise and aggregate. `databento_fetch.load`
+  takes a single path for exactly this reason.
+
+  **Open data question:** the per-minute cross-section drops to 14 symbols at
+  its minimum (median 688, p10 672). Half-day sessions and session boundaries
+  are the likely cause; it needs checking before any intraday regression, or
+  those minutes will be near-empty cross-sections carrying full weight.
 - **Venue caveat.** The 2018+ datasets are per-venue books, not consolidated
   NBBO. Validation overlay against `DBEQ.BASIC` (2023+) is part 5's.
 - **The assignment PDF in `assignment/` is the 2025 edition** and states a
@@ -275,3 +284,12 @@ The pre-2007 effect is genuine information diffusion and the post-2007
 disappearance is genuine too, which makes "did it migrate to intraday
 horizons?" the central question rather than a side one. Started the full
 intraday pull. Logged Databento data conditions (0.55% degraded venue-days).
+
+**2026-09-22** — Intraday pull complete: all 21 venue-year chunks, 28.2 GB.
+The first attempt lost 12 of 21 chunks to a network drop (DNS failure
+mid-run); the chunked design meant nothing was corrupted and the re-run
+skipped what had succeeded. Added retry-with-backoff, made the size estimate
+non-fatal, and made `fetch` clear a stale `.partial` before rewriting — one
+chunk needed a retry on the second run and recovered. Validated at scale on
+XNYS 2022: 69.4M records, 722 symbols, 251 sessions, minute grid holds at a
+median 688 symbols per minute, median spread 0.0965%.

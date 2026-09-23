@@ -18,6 +18,15 @@ years that survive are the ones that matter most — Databento's history starts
 in 2018 precisely because that is where the daily effect is already dead, and
 the migration hypothesis is tested against the most recent regime.
 
+Retries
+-------
+The first full run lost 12 of 21 chunks to a single network drop: one chunk
+timed out mid-stream and every chunk after it failed DNS resolution.  The
+chunking meant nothing was corrupted and the nine finished chunks survived,
+but a transient blip should not cost the rest of a multi-hour run.  Each chunk
+now retries with exponential backoff, and a failed size estimate no longer
+aborts the chunk — the estimate is a courtesy, the download is the point.
+
 Disk guard
 ----------
 Each chunk checks free space before downloading and stops cleanly rather than
@@ -52,6 +61,8 @@ HISTORY_START = "2018-05-01"
 END = "2024-12-31"
 YEARS = list(range(2024, 2017, -1))          # newest first — see the docstring
 MIN_FREE_GB = 25.0                            # stop before the volume is tight
+MAX_ATTEMPTS = 4
+BACKOFF_SECONDS = 30                          # 30s, 60s, 120s between attempts
 
 RESULTS = PROJECT_ROOT / "results"
 _t0 = time.time()
@@ -103,27 +114,41 @@ for venue, chunk in symbols.groupby("venue"):
                  f"re-run after freeing space to continue.")
             break
 
+        # The estimate is informational; a network hiccup on it must not
+        # cost us the chunk.
         try:
-            est = estimate_size(spec)
-            t_chunk = time.time()
-            step(f"{venue} {year}: pulling {len(tickers)} symbols, "
-                 f"est {est['gb']:.2f} GB ...")
-            path = fetch(spec)
-            size = path.stat().st_size
-            total_bytes += size
-            step(f"{venue} {year}: done, {size / 1e9:.2f} GB on disk "
-                 f"({size / max(est['bytes'], 1):.0%} of billable) "
-                 f"in {time.time() - t_chunk:.0f}s")
-            log.append({"venue": venue, "year": year,
-                        "gb_billable": est["gb"], "gb_on_disk": size / 1e9,
-                        "seconds": round(time.time() - t_chunk),
-                        "status": "ok"})
+            est_gb = estimate_size(spec)["gb"]
         except Exception as exc:  # noqa: BLE001
-            # One bad chunk must not kill a multi-hour run.  Record and move
-            # on; re-running picks up whatever is still missing.
-            step(f"{venue} {year}: FAILED — {type(exc).__name__}: {exc}")
-            log.append({"venue": venue, "year": year, "status": "failed",
-                        "error": f"{type(exc).__name__}: {exc}"})
+            est_gb = float("nan")
+            step(f"{venue} {year}: size estimate unavailable ({type(exc).__name__})")
+
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                t_chunk = time.time()
+                step(f"{venue} {year}: pulling {len(tickers)} symbols, "
+                     f"est {est_gb:.2f} GB (attempt {attempt}/{MAX_ATTEMPTS}) ...")
+                path = fetch(spec)
+                size = path.stat().st_size
+                total_bytes += size
+                step(f"{venue} {year}: done, {size / 1e9:.2f} GB on disk "
+                     f"in {time.time() - t_chunk:.0f}s")
+                log.append({"venue": venue, "year": year, "gb_billable": est_gb,
+                            "gb_on_disk": size / 1e9,
+                            "seconds": round(time.time() - t_chunk),
+                            "attempts": attempt, "status": "ok"})
+                break
+            except Exception as exc:  # noqa: BLE001
+                last = f"{type(exc).__name__}: {exc}"
+                if attempt < MAX_ATTEMPTS:
+                    wait = BACKOFF_SECONDS * (2 ** (attempt - 1))
+                    step(f"{venue} {year}: attempt {attempt} failed "
+                         f"({type(exc).__name__}); retrying in {wait}s")
+                    time.sleep(wait)
+                else:
+                    step(f"{venue} {year}: FAILED after {MAX_ATTEMPTS} attempts — {last}")
+                    log.append({"venue": venue, "year": year,
+                                "attempts": attempt, "status": "failed",
+                                "error": last})
 
 pd.DataFrame(log).to_csv(RESULTS / "p1_intraday_pull_log.csv", index=False)
 step(f"total on disk {total_bytes / 1e9:.1f} GB; "

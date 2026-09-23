@@ -193,6 +193,13 @@ def fetch(spec: PullSpec, cache_dir: Path = CACHE_DIR, key: str | None = None) -
     # complete one, so write to a temporary name and rename on success —
     # rename is atomic within a filesystem.
     tmp = path.with_suffix(path.suffix + ".partial")
+    # Remove a stale partial from a previous interrupted attempt before
+    # writing.  The first full run left a 611 MB one behind when the network
+    # dropped mid-stream; writing into it rather than over it would produce a
+    # file that is neither the old download nor the new one, and DBN gives no
+    # cheap way to notice.
+    if tmp.exists():
+        tmp.unlink()
     client.timeseries.get_range(
         dataset=spec.dataset,
         schema=spec.schema,
