@@ -1,12 +1,11 @@
 entity,issue_type,issue_date,description,severity
-25916,missing_return,,ret missing on 11.1% of this stock's rows (threshold 10%),medium
-25978,missing_return,,ret missing on 20.0% of this stock's rows (threshold 10%),medium
-26003,missing_return,,ret missing on 16.7% of this stock's rows (threshold 10%),medium
-46659,missing_return,,ret missing on 70.5% of this stock's rows (threshold 10%),medium
-75549,missing_return,,ret missing on 25.4% of this stock's rows (threshold 10%),medium
-84228,missing_return,,ret missing on 16.7% of this stock's rows (threshold 10%),medium
-84593,missing_return,,ret missing on 33.3% of this stock's rows (threshold 10%),medium
-86358,missing_return,,ret missing on 25.0% of this stock's rows (threshold 10%),medium
-86798,missing_return,,ret missing on 50.0% of this stock's rows (threshold 10%),medium
-87362,missing_return,,ret missing on 20.9% of this stock's rows (threshold 10%),medium
-DailyReturns,extreme_return,,2923 row(s) with |ret| > 100%; largest 3972.5%,medium
+17367,missing_return,,ret missing on 17.7% of this stock's rows (threshold 10%),medium
+19085,missing_return,,ret missing on 16.7% of this stock's rows (threshold 10%),medium
+19106,missing_return,,ret missing on 14.3% of this stock's rows (threshold 10%),medium
+19114,missing_return,,ret missing on 14.3% of this stock's rows (threshold 10%),medium
+19135,missing_return,,ret missing on 50.0% of this stock's rows (threshold 10%),medium
+19142,missing_return,,ret missing on 12.5% of this stock's rows (threshold 10%),medium
+19143,missing_return,,ret missing on 33.3% of this stock's rows (threshold 10%),medium
+19146,missing_return,,ret missing on 100.0% of this stock's rows (threshold 10%),medium
+91428,missing_return,,ret missing on 19.1% of this stock's rows (threshold 10%),medium
+DailyReturns,extreme_return,,410 row(s) with |ret| > 100%; largest 874.8%,medium
