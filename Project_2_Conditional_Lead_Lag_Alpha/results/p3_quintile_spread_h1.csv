@@ -1,0 +1,6 @@
+signal,spread_mean,spread_t_stat,n_periods
+conditional_signal (common - shock),-1.2239583887780234e-05,-0.15649868153760796,7112
+common_lag (continuation leg),2.877585483988612e-05,0.27754250411002135,7112
+"shock_lag (reversion leg, raw sign)",1.7591368966825586e-05,0.2552487839791707,7112
+"leader_ret_lag (part 1 baseline, unconditional)",5.639559778874266e-05,0.6729674322872697,7110
+"reversal_signal (naive, -own_lag)",0.0006812792079035585,6.018617780233148,7172
