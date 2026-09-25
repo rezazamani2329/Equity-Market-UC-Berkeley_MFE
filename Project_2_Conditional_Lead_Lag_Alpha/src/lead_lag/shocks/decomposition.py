@@ -65,6 +65,24 @@ adds leads and lags of the ex-leader index (a Dimson / Scholes-Williams
 correction) and the common beta becomes their sum.  Part 1's STATUS lists
 non-synchronous trading as the one microstructure threat *not* yet cleared;
 this knob is where it is addressed on the daily panel.
+
+Same-day classifier and the merge onto followers
+--------------------------------------------------
+Every row already carries ``common`` and ``shock`` with ``common + shock ==
+leader_ret`` by construction.  ``classify_shock_day`` adds one more thing for
+free: a same-day label for which piece *dominated* that leader-day, 'common'
+when the industry-wide piece was at least as large in magnitude as the
+residual, 'leader_specific' otherwise.  It is derived from ``common`` and
+``shock`` alone - no follower is consulted, and no future date is either - so
+labelling a day this way does not compromise the leader-only, non-circular,
+same-day construction above it.
+
+``follower_merge_table`` packages the (date, ff49)-keyed decomposition under
+the names a follower panel actually wants to merge on -
+``common_shock``/``leader_specific_shock`` in place of the internal
+``common``/``shock`` - plus the classifier, so the merge in part 3/4 is a
+single ``follower_panel.merge(follower_merge_table(shocks), on=["date",
+"ff49"], how="left")`` with no renaming or re-deriving at the call site.
 """
 
 from __future__ import annotations
@@ -128,6 +146,37 @@ class DecompositionSpec:
 
 
 # --------------------------------------------------------------------------- #
+# The same-day classifier                                                     #
+# --------------------------------------------------------------------------- #
+def classify_shock_day(common: np.ndarray, shock: np.ndarray) -> np.ndarray:
+    """Label each leader-day by which decomposed piece dominated it.
+
+    'common' when the industry-wide component was at least as large in
+    magnitude as the leader-specific residual that day, 'leader_specific'
+    when the residual was strictly larger (ties go to 'common').  Built from
+    ``common`` and ``shock`` alone, so it inherits their guarantees for free:
+    it is a same-day label (no future date enters it) and it never looks at a
+    follower (only the leader's own decomposed return enters it).  A row
+    where either input is NaN is left unclassified (``None``) rather than
+    guessed.
+
+    Args:
+        common: fitted common component, one value per leader-day.
+        shock: leader-specific residual, same shape and order as ``common``.
+
+    Returns:
+        Object-dtype numpy array of the same length: 'common',
+        'leader_specific', or None.
+    """
+    common = np.asarray(common, dtype=float)
+    shock = np.asarray(shock, dtype=float)
+    label = np.where(np.abs(shock) > np.abs(common), "leader_specific", "common")
+    label = label.astype(object)
+    label[np.isnan(common) | np.isnan(shock)] = None
+    return label
+
+
+# --------------------------------------------------------------------------- #
 # Typed output                                                                #
 # --------------------------------------------------------------------------- #
 class LeaderShocks(Dataset):
@@ -139,6 +188,9 @@ class LeaderShocks(Dataset):
         leader_ret      the leader's (or leader portfolio's) return that day
         common          fitted common component c_{L,t}
         shock           leader-specific residual u_{L,t}  (leader_ret - common)
+        shock_type      same-day classifier, 'common' if |common| >= |shock|
+                        that day else 'leader_specific' - see
+                        `classify_shock_day`.  Derived from common/shock only.
         beta_mkt        market beta used to form c on this day
         beta_ind        common industry beta (summed over sync lags)
         alpha           regression intercept used on this day
@@ -152,7 +204,7 @@ class LeaderShocks(Dataset):
 
     KEY: ClassVar[tuple[str, ...]] = ("date", "ff49")
     REQUIRED: ClassVar[tuple[str, ...]] = (
-        "date", "ff49", "leader_ret", "common", "shock",
+        "date", "ff49", "leader_ret", "common", "shock", "shock_type",
         "beta_mkt", "beta_ind", "alpha", "r2", "n_window",
     )
     SYNONYMS: ClassVar[dict[str, str]] = {}
@@ -165,6 +217,10 @@ class LeaderShocks(Dataset):
                     "alpha", "r2"):
             df[col] = pd.to_numeric(df[col], errors="coerce")
         df["n_window"] = pd.to_numeric(df["n_window"], errors="coerce").fillna(0).astype("int64")
+        # Categorical label, not numeric - deliberately left out of the
+        # to_numeric loop above so an unexpected value surfaces as itself
+        # rather than silently becoming NaN.
+        df["shock_type"] = df["shock_type"].astype("string")
         return df.sort_values(["ff49", "date"]).reset_index(drop=True)
 
     def variance_shares(self) -> pd.DataFrame:
@@ -337,6 +393,7 @@ def decompose_full_sample(
 
         common = fit.fittedvalues
         shock = y - common
+        shock_type = classify_shock_day(common.to_numpy(), shock.to_numpy())
         beta_mkt = float(fit.params.get(spec.market_col, 0.0))
         beta_ind = float(sum(fit.params.get(c, 0.0) for c in sync_ind))
 
@@ -348,6 +405,7 @@ def decompose_full_sample(
                     "leader_ret": y.to_numpy(),
                     "common": common.to_numpy(),
                     "shock": shock.to_numpy(),
+                    "shock_type": shock_type,
                     "beta_mkt": beta_mkt,
                     "beta_ind": beta_ind,
                     "alpha": float(fit.params.get("const", 0.0)),
@@ -479,6 +537,12 @@ def decompose_rolling(
                 "n_window": nwin,
             }
         ).dropna(subset=["common"])
+        # Computed after the dropna above so shock_type is only ever derived
+        # from a day that actually has a point-in-time common/shock pair -
+        # the pre-burn-in rows never reach this classifier.
+        out["shock_type"] = classify_shock_day(
+            out["common"].to_numpy(), out["shock"].to_numpy()
+        )
         rows.append(out)
 
     if not rows:
@@ -487,3 +551,39 @@ def decompose_rolling(
             f"fit. Need > {spec.min_obs} rows per industry; check the window."
         )
     return LeaderShocks.from_raw(pd.concat(rows, ignore_index=True))
+
+
+# --------------------------------------------------------------------------- #
+# Step 3: the merge-ready table                                               #
+# --------------------------------------------------------------------------- #
+def follower_merge_table(shocks: LeaderShocks) -> pd.DataFrame:
+    """The (date, ff49) decomposition table, named for merging onto followers.
+
+    Works on either estimator's output - pass a `decompose_full_sample` result
+    for a descriptive/backtest merge, or a `decompose_rolling` result when the
+    consumer needs a point-in-time (no-look-ahead) split.  This function does
+    not itself add or remove any look-ahead risk; it only renames what the
+    chosen estimator already produced.
+
+    Returns ``date, ff49, common_shock, leader_specific_shock, shock_type`` -
+    a straight rename of ``common``/``shock`` to the names a follower panel
+    merge expects, plus the same-day classifier.  Nothing here reads a
+    follower's return or a later date: every column traces back to the
+    leader's own same-day regression in `decompose_full_sample` /
+    `decompose_rolling`, so merging this onto `follower_panel.parquet` by
+    ``(date, ff49)`` cannot leak follower information back into the leader's
+    own decomposition.
+
+    Usage::
+
+        shocks = decompose_full_sample(frame, spec)
+        merged = follower_panel.merge(
+            follower_merge_table(shocks), on=["date", "ff49"], how="left"
+        )
+        common_days = merged[merged["shock_type"] == "common"]
+        specific_days = merged[merged["shock_type"] == "leader_specific"]
+        # run compute_ic / horizon_ic / quantile_portfolios on each separately
+    """
+    return shocks.frame[["date", "ff49", "common", "shock", "shock_type"]].rename(
+        columns={"common": "common_shock", "shock": "leader_specific_shock"}
+    )

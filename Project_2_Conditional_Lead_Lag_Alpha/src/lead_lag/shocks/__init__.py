@@ -23,19 +23,29 @@ Public API
 ----------
     decomposition   ex_leader_industry_returns, assemble_leader_frame,
                     decompose_full_sample, decompose_rolling,
+                    classify_shock_day, follower_merge_table,
                     DecompositionSpec, LeaderShocks
     regression      build_conditional_panel, conditional_response,
                     conditional_horizon_profile, nw_lags_overlap
     leader_robustness  run_leader_robustness, default_variants, LeaderVariant
+
+`follower_merge_table` is the hand-off point for whoever runs the conditional
+subsample test: it takes either estimator's `LeaderShocks` and returns the
+`(date, ff49)`-keyed `common_shock` / `leader_specific_shock` / `shock_type`
+table, ready for `follower_panel.merge(..., on=["date", "ff49"])` and then a
+split on `shock_type` before re-running the IC / horizon-IC / quantile-
+portfolio pipeline on each subsample.
 """
 
 from lead_lag.shocks.decomposition import (
     DecompositionSpec,
     LeaderShocks,
     assemble_leader_frame,
+    classify_shock_day,
     decompose_full_sample,
     decompose_rolling,
     ex_leader_industry_returns,
+    follower_merge_table,
 )
 from lead_lag.shocks.leader_robustness import (
     LeaderVariant,
@@ -60,6 +70,8 @@ __all__ = [
     "assemble_leader_frame",
     "decompose_full_sample",
     "decompose_rolling",
+    "classify_shock_day",
+    "follower_merge_table",
     "ConditionalResult",
     "build_conditional_panel",
     "conditional_response",
