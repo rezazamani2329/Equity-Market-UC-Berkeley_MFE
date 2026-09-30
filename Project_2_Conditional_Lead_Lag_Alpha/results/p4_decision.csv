@@ -1,0 +1,6 @@
+criterion,passed,value
+"1. mean return > 0, Holm p < 0.05",False,"ann mean -0.0046, Holm p 0.2816"
+"2. spanning alpha > 0, p < 0.05 (open-to-close market)",False,"alpha -0.0046, p 0.2928"
+3. breakeven cost > median half-spread (both 2007-2024),False,breakeven -0.09 bp vs half-spread 2.58 bp
+reconciliation reproduces Parts 1 and 3,True,all committed rows match
+VERDICT,False,DO NOT IMPLEMENT

@@ -1,0 +1,6 @@
+check,signal,timing,spread_bp_day,t_stat,committed_bp,committed_t,matches
+Part 1 quintile_sort (industry bins),leader_ret_lag,A: signal t-1 -> return t,3.58992275770443,4.3398910951902945,3.59,4.34,1.0
+Part 3 quantile_portfolios (stock quintiles),leader_ret_lag,B: signal t-1 -> return t+1 (Part 3 as run),0.5639559778874266,0.6729674322872697,0.56,0.67,1.0
+Part 3 quantile_portfolios (stock quintiles),leader_ret_lag,A: signal t-1 -> return t,3.3209722690446424,3.8570761687841983,,,
+Part 3 quantile_portfolios (stock quintiles),conditional_signal,B: signal t-1 -> return t+1 (Part 3 as run),-0.12239583887780234,-0.15649868153760796,-0.12,-0.16,1.0
+Part 3 quantile_portfolios (stock quintiles),conditional_signal,A: signal t-1 -> return t,2.9866856168746363,3.7189561227064623,,,
