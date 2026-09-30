@@ -23,7 +23,11 @@ from lead_lag.portfolio.construction import (
     turnover,
     vol_scaled,
 )
-from lead_lag.portfolio.inputs import dimson_beta, full_panel_inputs
+from lead_lag.portfolio.inputs import (
+    calendar_lagged_signals,
+    dimson_beta,
+    full_panel_inputs,
+)
 from lead_lag.portfolio.performance import (
     STRESS,
     WINDOWS,
@@ -37,7 +41,7 @@ from lead_lag.portfolio.performance import (
 )
 
 __all__ = [
-    "STRESS", "WINDOWS", "attribution", "book_returns", "dimson_beta", "drawdown",
+    "STRESS", "WINDOWS", "attribution", "book_returns", "calendar_lagged_signals", "dimson_beta", "drawdown",
     "full_panel_inputs", "holm", "industry_book", "stock_book", "stress_table",
     "summary_stats", "turnover", "var_backtest", "vol_scaled", "window_slice",
 ]

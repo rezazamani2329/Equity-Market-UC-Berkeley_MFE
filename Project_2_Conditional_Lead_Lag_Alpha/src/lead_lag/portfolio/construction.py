@@ -144,9 +144,11 @@ def book_returns(
         "gross_valid": w.abs().where(r.notna(), 0.0),
     })[held]
     agg = frame.groupby(date_col).sum()
+    coverage = agg["gross_valid"] / agg["gross"]
+    # a day on which no held stock has a return is missing, not a 0% day
     return pd.DataFrame({
-        "ret": agg["pnl"],
-        "coverage": agg["gross_valid"] / agg["gross"],
+        "ret": agg["pnl"].where(coverage > 0),
+        "coverage": coverage,
     })
 
 

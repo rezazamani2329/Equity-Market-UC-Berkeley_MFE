@@ -127,7 +127,7 @@ def full_panel_inputs(
         retx, mid_ret (+ `mid_ret_valid`), own_lag, beta, rel_spread_lag and
         c_valid (True when the open-to-close return is computable).
     """
-    keep = ["date", "permno", "prc", "ret", "dlret"]
+    keep = ["date", "permno", "prc", "mktcap", "ret", "dlret"]
     df = returns[keep].merge(extras, on=["date", "permno"], how="left")
     fac = factors[["date", "mktrf", "rf"]].sort_values("date").copy()
     fac["mktrf_lag"] = fac["mktrf"].shift(1)
@@ -140,16 +140,20 @@ def full_panel_inputs(
     df["own_lag"] = g["ret"].shift(1)
 
     # open -> close on day t. prc and openprc are both absolute levels on the
-    # same day, so no split adjustment is needed. A delisting return on t is
-    # still earned by a holder, so it is compounded in; a delisting-only row
-    # (no trade on t) earns the delisting return alone.
+    # same day, so no split adjustment is needed. A stock that traded at the
+    # open and delisted that day still earns its delisting return, so it is
+    # compounded in. Without an opening print there is no open to buy at, so
+    # ret_C is NaN (the position contributes zero, per the pre-registration);
+    # that includes delisting-only rows, whose DLRET runs from the previous
+    # close and was never available to an open-to-close holder.
     dl = df["dlret"].fillna(0.0)
     c_ok = (df["openprc"] > 0) & (df["prc"] > 0)
     intraday = (df["prc"] / df["openprc"] - 1.0).where(c_ok)
-    delist_only = df["prc"].isna() & df["dlret"].notna()
     df["ret_C"] = ((1.0 + intraday) * (1.0 + dl) - 1.0).where(c_ok)
-    df.loc[delist_only, "ret_C"] = df.loc[delist_only, "dlret"]
-    df["c_valid"] = c_ok | delist_only
+    df["c_valid"] = c_ok
+    # previous close's market cap: weights for the value-weighted open-to-close
+    # market used in the convention-C attribution
+    df["mktcap_lag"] = g["mktcap"].shift(1)
 
     df["beta"] = dimson_beta(
         df, window=beta_window, min_obs=beta_min_obs, shrink_weight=shrink_weight
@@ -163,6 +167,37 @@ def full_panel_inputs(
 
     cols = [
         "date", "permno", "ret_A", "ret_B", "ret_C", "c_valid", "retx",
-        "mid_ret", "mid_ret_valid", "own_lag", "beta", "rel_spread_lag",
+        "mid_ret", "mid_ret_valid", "own_lag", "beta", "rel_spread_lag", "mktcap_lag",
     ]
     return df[cols]
+
+
+def calendar_lagged_signals(
+    shocks_frame: pd.DataFrame, calendar: pd.DatetimeIndex
+) -> pd.DataFrame:
+    """The leader's decomposed move, lagged one TRADING SESSION on a calendar.
+
+    `shocks.regression.lag_leader_components` shifts by row within each
+    industry's shock series and keeps the row's own date. A day-t value
+    therefore exists only if a shock row dated t exists, which requires the
+    leader's return at the close of t (look-ahead in industry membership), and
+    a missing day t-1 makes day t carry day t-2's value.
+
+    Here each shock row dated d is re-dated to the next session after d on
+    `calendar`, so the signal on day t exists if and only if the leader's
+    decomposition exists for day t-1, and nothing from day t is consulted.
+
+    Returns date, ff49, common_lag, shock_lag, leader_ret_lag,
+    conditional_signal (= common_lag - shock_lag).
+    """
+    cal = pd.DatetimeIndex(np.sort(pd.DatetimeIndex(calendar).unique()))
+    src = shocks_frame[["date", "ff49", "common", "shock", "leader_ret"]].copy()
+    pos = cal.searchsorted(pd.DatetimeIndex(src["date"]), side="right")
+    keep = pos < len(cal)
+    src = src[keep].copy()
+    src["date"] = cal[pos[keep]]
+    out = src.rename(columns={
+        "common": "common_lag", "shock": "shock_lag", "leader_ret": "leader_ret_lag",
+    })
+    out["conditional_signal"] = out["common_lag"] - out["shock_lag"]
+    return out.reset_index(drop=True)

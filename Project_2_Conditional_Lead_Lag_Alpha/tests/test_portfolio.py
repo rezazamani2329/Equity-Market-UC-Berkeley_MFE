@@ -8,6 +8,8 @@ import pytest
 
 from lead_lag.portfolio import (
     book_returns,
+    calendar_lagged_signals,
+    drawdown,
     dimson_beta,
     full_panel_inputs,
     holm,
@@ -53,7 +55,8 @@ def _full_panel(n=600, seed=1):
         lagged = np.r_[0.0, mkt[:-1]]
         r = b0 * mkt + b1 * lagged + rng.normal(0, 0.005, n)
         prc = 50 * np.cumprod(1 + r)
-        rets.append(pd.DataFrame({"date": dates, "permno": permno, "ret": r, "prc": prc}))
+        rets.append(pd.DataFrame({"date": dates, "permno": permno, "ret": r, "prc": prc,
+                                  "mktcap": prc * 1e6}))
     ret = pd.concat(rets, ignore_index=True)
     ret["dlret"] = np.nan
     ext = ret[["date", "permno", "prc"]].copy()
@@ -217,7 +220,7 @@ def test_follower_gap_does_not_leak_into_next_day_return():
 def test_open_to_close_and_delisting():
     d = pd.to_datetime(["2020-01-02", "2020-01-03", "2020-01-06", "2020-01-07"])
     ret = pd.DataFrame({
-        "date": d, "permno": 7,
+        "date": d, "permno": 7, "mktcap": 1e9,
         "prc": [11.0, 11.0, 11.0, np.nan],
         "ret": [0.0, 0.0, -0.23, -0.5],
         "dlret": [np.nan, np.nan, -0.3, -0.5],
@@ -231,7 +234,8 @@ def test_open_to_close_and_delisting():
     assert out.loc[d[0], "ret_C"] == pytest.approx(0.1)
     assert np.isnan(out.loc[d[1], "ret_C"]) and not out.loc[d[1], "c_valid"]
     assert out.loc[d[2], "ret_C"] == pytest.approx(1.1 * 0.7 - 1)
-    assert out.loc[d[3], "ret_C"] == pytest.approx(-0.5)
+    # delisting-only day: no open print to buy at, so no open-to-close return
+    assert np.isnan(out.loc[d[3], "ret_C"]) and not out.loc[d[3], "c_valid"]
 
 
 # ------------------------------------------------------------- performance
@@ -265,3 +269,54 @@ def test_holm():
     assert adj["a"] == pytest.approx(0.03)
     assert adj["c"] == pytest.approx(0.06)
     assert adj["b"] == pytest.approx(0.06)
+
+
+# ------------------------------------------------- fixes from the code audit
+def test_drawdown_counts_a_first_day_loss():
+    r = pd.Series([-0.10, 0.0, 0.0, 0.05, 0.0])
+    assert drawdown(r).min() == pytest.approx(-0.10)
+    assert summary_stats(pd.concat([r] * 5, ignore_index=True))["max_dd"] < 0
+
+
+def test_kupiec_is_finite_with_zero_exceedances():
+    r = pd.Series(np.linspace(0.001, 0.002, 1500),
+                  index=pd.bdate_range("2000-01-03", periods=1500))
+    out = var_backtest(r)
+    assert out["exceedances"] == 0
+    assert np.isfinite(out["kupiec_lr"]) and out["kupiec_p"] < 1e-3
+    assert out["christoffersen_lr"] == pytest.approx(0.0)
+
+
+def test_var_backtest_short_series_does_not_crash():
+    r = pd.Series(np.random.default_rng(0).normal(0, 0.01, 200),
+                  index=pd.bdate_range("2000-01-03", periods=200))
+    assert var_backtest(r)["n_days"] == 0
+
+
+def test_book_returns_zero_coverage_is_missing_not_zero():
+    p = pd.DataFrame({"date": pd.to_datetime(["2020-01-02"] * 2),
+                      "w": [0.5, -0.5], "r": [np.nan, np.nan]})
+    assert np.isnan(book_returns(p, "w", "r").iloc[0]["ret"])
+
+
+def test_holm_rejects_missing_pvalues():
+    with pytest.raises(ValueError):
+        holm({"a": np.nan, "b": 0.01})
+
+
+def test_calendar_lag_uses_previous_session_only():
+    cal = pd.bdate_range("2021-01-04", periods=6)
+    shocks = pd.DataFrame({
+        "date": cal[[0, 1, 3, 4]],          # the leader has no row on cal[2]
+        "ff49": 1, "common": [1.0, 2.0, 4.0, 5.0], "shock": 0.5,
+        "leader_ret": [1.5, 2.5, 4.5, 5.5],
+    })
+    out = calendar_lagged_signals(shocks, cal).set_index("date")
+    assert out.loc[cal[1], "common_lag"] == 1.0      # from cal[0]
+    assert out.loc[cal[2], "common_lag"] == 2.0      # from cal[1]
+    # cal[2] had no leader row, so cal[3] has NO signal (not a stale cal[1] value)
+    assert cal[3] not in out.index
+    assert out.loc[cal[4], "common_lag"] == 4.0
+    assert out.loc[cal[5], "conditional_signal"] == pytest.approx(5.0 - 0.5)
+    # a missing day t leaves day t's own signal intact (it depends on t-1 only)
+    assert out.loc[cal[2], "leader_ret_lag"] == 2.5

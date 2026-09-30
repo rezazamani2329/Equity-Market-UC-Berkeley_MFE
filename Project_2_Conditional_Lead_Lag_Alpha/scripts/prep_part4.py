@@ -10,6 +10,10 @@ factors) and results/p1_follower_panel.parquet from scripts/run_part1.py.
 Writes:
     cache.nosync/p4_inputs.parquet    one row per follower-day (stock-level,
                                       CRSP-derived: never commit)
+    cache.nosync/p4_market_intraday.parquet
+                                      value-weighted open-to-close return of all
+                                      CRSP common stocks, per day (for the
+                                      convention-C attribution)
     results/p4_input_coverage.csv     share of follower-days with each input,
                                       by year (aggregate, safe to commit)
 """
@@ -59,7 +63,7 @@ factors = load_or_fetch_factors_daily(None, START, END)
 
 step("delisting-adjusted returns on the full panel (part 1's function) ...")
 returns, _ = adjusted_daily_returns(daily, delist)
-ret = returns.frame[["date", "permno", "prc", "ret", "dlret"]].copy()
+ret = returns.frame[["date", "permno", "prc", "mktcap", "ret", "dlret"]].copy()
 extras = daily.frame[EXTRA_COLS].copy()
 del daily, returns, delist
 gc.collect()
@@ -73,15 +77,28 @@ step(f"follower keys: {len(keys):,}")
 permnos = np.sort(ret["permno"].unique())
 chunks = np.array_split(permnos, N_CHUNKS)
 parts = []
+mkt_num: pd.Series | None = None
+mkt_den: pd.Series | None = None
 for i, chunk in enumerate(chunks, 1):
     r = ret[ret["permno"].isin(chunk)]
     e = extras[extras["permno"].isin(chunk)]
     out = full_panel_inputs(r, e, factors.frame)
+    # value-weighted open-to-close market over ALL stocks (not just followers),
+    # weights = previous close's market cap; accumulated across chunks
+    m = out["ret_C"].notna() & (out["mktcap_lag"] > 0)
+    num = (out.loc[m, "ret_C"] * out.loc[m, "mktcap_lag"]).groupby(out.loc[m, "date"]).sum()
+    den = out.loc[m, "mktcap_lag"].groupby(out.loc[m, "date"]).sum()
+    mkt_num = num if mkt_num is None else mkt_num.add(num, fill_value=0.0)
+    mkt_den = den if mkt_den is None else mkt_den.add(den, fill_value=0.0)
     out = keys[keys["permno"].isin(chunk)].merge(out, on=["date", "permno"], how="left")
     parts.append(out)
     step(f"chunk {i}/{N_CHUNKS}: {len(out):,} follower rows")
     del r, e, out
     gc.collect()
+
+mkt_c = (mkt_num / mkt_den).rename("mkt_C").rename_axis("date").reset_index()
+mkt_c.to_parquet(CACHE / "p4_market_intraday.parquet", index=False)
+step(f"wrote cache.nosync/p4_market_intraday.parquet ({len(mkt_c):,} days)")
 
 inputs = pd.concat(parts, ignore_index=True).sort_values(["date", "permno"])
 inputs.to_parquet(CACHE / "p4_inputs.parquet", index=False)

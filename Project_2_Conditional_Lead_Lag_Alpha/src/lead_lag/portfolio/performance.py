@@ -43,9 +43,13 @@ def nw_mean_test(r: pd.Series, lags: int = NW_LAGS) -> tuple[float, float]:
 
 
 def drawdown(r: pd.Series) -> pd.Series:
-    """Drawdown of cumulative wealth (1 + r).cumprod() from its running peak."""
+    """Drawdown of cumulative wealth (1 + r).cumprod() from its running peak.
+
+    The peak starts at the initial capital of 1, so a loss on the first day
+    of a series or window counts as a drawdown.
+    """
     wealth = (1.0 + r.fillna(0.0)).cumprod()
-    return wealth / wealth.cummax() - 1.0
+    return wealth / wealth.cummax().clip(lower=1.0) - 1.0
 
 
 def max_dd_duration(r: pd.Series) -> int:
@@ -107,13 +111,19 @@ def var_backtest(
     hits = (r[ok] < q_var[ok]).astype(int).to_numpy()
     n, x = len(hits), int(hits.sum())
     p = 1 - var_level
+    if n < 2:
+        return {"n_days": n, "var_level": var_level}
 
     def _ll(k: int, m: int, prob: float) -> float:
-        if prob <= 0 or prob >= 1:
-            return 0.0
-        return (m - k) * np.log(1 - prob) + k * np.log(prob)
+        """Binomial log-likelihood, using the 0*log(0) = 0 limit."""
+        out = 0.0
+        if m - k > 0:
+            out += (m - k) * np.log(1 - prob) if prob < 1 else -np.inf
+        if k > 0:
+            out += k * np.log(prob) if prob > 0 else -np.inf
+        return out
 
-    lr_uc = -2 * (_ll(x, n, p) - _ll(x, n, x / n)) if 0 < x < n else np.nan
+    lr_uc = -2 * (_ll(x, n, p) - _ll(x, n, x / n))
     # Christoffersen independence: transition counts of the hit sequence
     h0, h1 = hits[:-1], hits[1:]
     n00 = int(((h0 == 0) & (h1 == 0)).sum()); n01 = int(((h0 == 0) & (h1 == 1)).sum())
@@ -123,7 +133,7 @@ def var_backtest(
     pi = (n01 + n11) / (n00 + n01 + n10 + n11)
     ll_null = _ll(n01 + n11, n00 + n01 + n10 + n11, pi)
     ll_alt = _ll(n01, n00 + n01, pi0) + _ll(n11, n10 + n11, pi1)
-    lr_ind = -2 * (ll_null - ll_alt) if n01 + n11 > 0 else np.nan
+    lr_ind = -2 * (ll_null - ll_alt)
     return {
         "n_days": n,
         "var_level": var_level,
@@ -181,7 +191,14 @@ def attribution(r: pd.Series, regressors: pd.DataFrame, lags: int = NW_LAGS) -> 
 
 
 def holm(pvalues: dict[str, float]) -> dict[str, float]:
-    """Holm-Bonferroni adjusted p-values for a family of tests."""
+    """Holm-Bonferroni adjusted p-values for a family of tests.
+
+    Raises on a missing p-value: one NaN would otherwise sort first and force
+    every adjusted p-value to 1.
+    """
+    bad = [k for k, v in pvalues.items() if not np.isfinite(v)]
+    if bad:
+        raise ValueError(f"holm: non-finite p-values for {bad}")
     items = sorted(pvalues.items(), key=lambda kv: kv[1])
     m = len(items)
     adjusted: dict[str, float] = {}
