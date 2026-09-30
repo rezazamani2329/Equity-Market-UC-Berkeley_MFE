@@ -414,7 +414,7 @@ for ax, name in zip(axes, PRIMARY + ["reversal"]):
     ax.set_title(name)
     ax.set_xlabel("")
     ax.legend(frameon=False, fontsize=8)
-axes[0].set_ylabel("Annualised mean return (%)")
+axes[0].set_ylabel("Annualized mean return (%)")
 fig.tight_layout()
 fig.savefig(FIGURES / "p4_timing_decomposition.png", dpi=200)
 plt.close(fig)

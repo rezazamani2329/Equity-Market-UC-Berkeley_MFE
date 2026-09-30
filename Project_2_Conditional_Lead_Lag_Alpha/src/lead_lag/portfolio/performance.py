@@ -2,7 +2,7 @@
 Performance, risk and factor attribution for Part 4's daily return series.
 
 All inputs are daily simple returns of a book scaled to gross exposure 1
-(long $0.50, short $0.50) unless stated. Annualisation uses 252 sessions.
+(long $0.50, short $0.50) unless stated. Annualization uses 252 sessions.
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ def summary_stats(r: pd.Series) -> dict[str, float]:
         "ann_mean": mu * ANN,
         "ann_vol": sd * np.sqrt(ANN),
         "sharpe": sr_d * np.sqrt(ANN),
-        # Lo (2002), iid case: SE of the annualised Sharpe ratio
+        # Lo (2002), iid case: SE of the annualized Sharpe ratio
         "sharpe_se": np.sqrt((1.0 + 0.5 * sr_d**2) / n) * np.sqrt(ANN),
         "t_nw": t_nw,
         "p_nw": p_nw,
@@ -149,7 +149,7 @@ def var_backtest(
 
 
 def stress_table(r: pd.Series) -> pd.DataFrame:
-    """Cumulative return, annualised vol and max drawdown in each stress window."""
+    """Cumulative return, annualized vol and max drawdown in each stress window."""
     rows = []
     for name, (a, b) in STRESS.items():
         s = window_slice(r.dropna(), a, b)
@@ -169,7 +169,7 @@ def stress_table(r: pd.Series) -> pd.DataFrame:
 def attribution(r: pd.Series, regressors: pd.DataFrame, lags: int = NW_LAGS) -> dict[str, float]:
     """Newey-West time-series regression of `r` on `regressors`.
 
-    Returns the annualised intercept and its t-statistic, each slope with its
+    Returns the annualized intercept and its t-statistic, each slope with its
     t-statistic, and R-squared.
     """
     df = pd.concat([r.rename("y"), regressors], axis=1, join="inner").dropna()

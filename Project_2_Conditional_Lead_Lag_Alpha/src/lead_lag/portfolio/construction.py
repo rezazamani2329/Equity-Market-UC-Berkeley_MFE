@@ -22,7 +22,7 @@ an industry book:
 is dollar-, FF49-industry- and beta-neutral.
 
 Both use closed-form projections (Frisch-Waugh within date), so exposures are
-zero to floating-point precision and no numerical optimiser is needed.
+zero to floating-point precision and no numerical optimizer is needed.
 """
 
 from __future__ import annotations
@@ -179,7 +179,7 @@ def vol_scaled(
 ) -> pd.Series:
     """Scale a gross-1 return series to a target volatility using only past data.
 
-    Scale on day t = target / (annualised std of the previous `window` days),
+    Scale on day t = target / (annualized std of the previous `window` days),
     capped at `cap`. The first `window` days have no scale and are NaN.
     """
     trailing = returns.rolling(window).std().shift(1) * np.sqrt(252)

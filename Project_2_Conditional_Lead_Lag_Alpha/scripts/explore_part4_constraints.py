@@ -2,7 +2,7 @@
 EXPLORATORY (not pre-registered): which neutrality constraint removes the
 lead-lag signals' returns?
 
-The pre-registered industry books neutralise dollar, beta and own-lag together.
+The pre-registered industry books neutralize dollar, beta and own-lag together.
 This script adds the constraints one at a time, so the report can say whether
 the signals' raw predictability is leader information or the followers' own
 industry move from the day before (one-day industry momentum).
