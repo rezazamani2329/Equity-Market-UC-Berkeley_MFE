@@ -68,7 +68,7 @@ The full outputs are reproduced at the end of this file.
 - **Its timing would have hidden the effect.** Our prompt said "I trade at the close".
   ChatGPT took that literally, correctly ruled out trading at the same close that produced
   the signal, and moved the trade to the close of t, a full session after the signal. That
-  is the two-session gap of the first version of Part 3: Part 1 shows the effect is gone
+  is a two-session gap, and Part 1 shows the effect is gone
   after one session, and in Part 4 every lead-lag book earns roughly nothing under this
   timing (`leader_ret_lag` t = 0.02). It did suggest testing entry at the next open and
   splitting the return into overnight and daytime parts, but it did not say that the next
@@ -168,8 +168,8 @@ Part 4: that a signal shared within an industry makes the strategy industry allo
 industry neutrality removes it), market-beta timing, and industry momentum leaking into
 the "common" component through the industry index. It also flagged the calendar-lag defect
 the code audit found. Its weakest point was timing: following our prompt's "I trade at the
-close", it moved the trade a full session after the signal, the same two-session gap as
-the first version of Part 3, and offered the next-open entry only as a test. That is partly a
+close", it moved the trade a full session after the signal, a two-session gap,
+and offered the next-open entry only as a test. That is partly a
 lesson about our prompt, which should have asked for the earliest feasible execution rather
 than stating one. It was long and partly generic, and it could not quantify costs. Its construction
 answer shared Part 4's constraints but weighted industries by follower count, a problem it
