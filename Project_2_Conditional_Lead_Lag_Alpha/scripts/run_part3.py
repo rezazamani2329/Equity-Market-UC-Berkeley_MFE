@@ -71,8 +71,8 @@ print(f"follower_panel: {len(fp):,} rows, {fp['permno'].nunique():,} permnos")
 print(f"shocks (rolling, point-in-time): {len(shocks.frame):,} industry-days")
 
 # --------------------------------------------------------- build the signal
-step("building the conditional signal panel (lag=1) ...")
-signal_panel = conditional_signal_panel(fp, shocks, lag=1, ret_col="ret")
+step("building the conditional signal panel (lag=0) ...")
+signal_panel = conditional_signal_panel(fp, shocks, lag=0, ret_col="ret")
 signal_panel["reversal_signal"] = -signal_panel["own_lag"]
 n_have_signal = signal_panel["conditional_signal"].notna().sum()
 print(f"follower-days with a non-missing conditional_signal: {n_have_signal:,} "
