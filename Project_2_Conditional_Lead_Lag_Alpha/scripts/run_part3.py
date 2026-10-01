@@ -113,12 +113,14 @@ merged_h1 = signal_panel.merge(
 )
 
 q_rows = []
+q_tables = []
 for label, col in SIGNALS.items():
     q = quantile_portfolios(merged_h1, signal_col=col, ret_col="fwd_ret_1d", n_quantiles=5)
     print(f"\n-- {label} --")
     print(q.summary.round(6).to_string())
     print(f"long-short spread: mean={q.spread_mean:.4%}  t={q.spread_t_stat:.2f}  "
           f"n={len(q.spread)}")
+    q_tables.append(q.summary.reset_index().assign(signal=label))
     q_rows.append(
         {
             "signal": label,
@@ -129,6 +131,7 @@ for label, col in SIGNALS.items():
     )
 q_summary = pd.DataFrame(q_rows)
 q_summary.to_csv(RESULTS / "p3_quintile_spread_h1.csv", index=False)
+pd.concat(q_tables).to_csv(RESULTS / "p3_quintile_returns_h1.csv", index=False)
 
 # ----------------------------------------------------------------- headline
 step("headline comparison: h=1 mean IC and t-stat, every signal ===")
