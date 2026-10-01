@@ -105,11 +105,10 @@ print(f"follower panel {len(fp):,} rows; p4_inputs {len(inputs):,} rows")
 
 # ------------------------------------------------------- reconciliation
 # Uses the team's own functions, so the committed Part 1 / Part 3 numbers must
-# come out exactly; only the timing differs between rows.
+# come out exactly; only the timing differs between rows. Part 3 fixed its
+# alignment in 1c1544b (lag=1 -> lag=0); both versions are reproduced.
 step("reconciliation with Parts 1 and 3 ...")
-sp = conditional_signal_panel(fp, shocks, lag=1, ret_col="ret")
-fwd = forward_returns(fp, horizons=(1,), ret_col="ret")
-sp_b = sp.merge(fwd[["date", "permno", "fwd_ret_1d"]], on=["date", "permno"], how="left")
+fwd = forward_returns(fp, horizons=(1,), ret_col="ret")[["date", "permno", "fwd_ret_1d"]]
 
 q1 = quintile_sort(fp, lag=1, n_bins=5)
 q1 = (q1.set_index("bin") if "bin" in q1.columns else q1).loc[-1]  # -1 = top minus bottom
@@ -118,17 +117,28 @@ recon = [{
     "timing": "A: signal t-1 -> return t", "spread_bp_day": q1["mean_ret"] * 1e4,
     "t_stat": q1["t_stat"], "committed_bp": 3.59, "committed_t": 4.34,
 }]
-for sig, committed in [("leader_ret_lag", (0.56, 0.67)), ("conditional_signal", (-0.12, -0.16))]:
-    for label, frame, rc, com in [
-        ("B: signal t-1 -> return t+1 (Part 3 as run)", sp_b, "fwd_ret_1d", committed),
-        ("A: signal t-1 -> return t", sp, "ret", (np.nan, np.nan)),
-    ]:
-        q = quantile_portfolios(frame, signal_col=sig, ret_col=rc, n_quantiles=5)
+P3_RUNS = [  # (label, lag, committed {signal: (bp, t)})
+    ("Part 3 as run (lag=0): signal t -> return t+1", 0,
+     {"leader_ret_lag": (3.36, 3.91), "conditional_signal": (2.98, 3.72)}),
+    ("Part 3 before 1c1544b (lag=1): signal t-1 -> return t+1", 1,
+     {"leader_ret_lag": (0.56, 0.67), "conditional_signal": (-0.12, -0.16)}),
+]
+for label, lag, committed in P3_RUNS:
+    sp = conditional_signal_panel(fp, shocks, lag=lag, ret_col="ret").merge(
+        fwd, on=["date", "permno"], how="left")
+    for sig, com in committed.items():
+        q = quantile_portfolios(sp, signal_col=sig, ret_col="fwd_ret_1d", n_quantiles=5)
         recon.append({
             "check": "Part 3 quantile_portfolios (stock quintiles)", "signal": sig,
             "timing": label, "spread_bp_day": q.spread_mean * 1e4,
             "t_stat": q.spread_t_stat, "committed_bp": com[0], "committed_t": com[1],
         })
+    if lag == 1:  # the row-lagged leader move, compared below with the calendar lag
+        team = sp[["date", "permno", "conditional_signal"]].rename(
+            columns={"conditional_signal": "team_cs"})
+    del sp
+    gc.collect()
+del fwd
 recon = pd.DataFrame(recon)
 has_ref = recon["committed_bp"].notna()
 # committed values are published to 2 decimals, so compare at that precision
@@ -149,9 +159,6 @@ if not recon_ok:
 calendar = pd.DatetimeIndex(factors.index)
 lagged = calendar_lagged_signals(shocks.frame, calendar)
 panel = fp[["date", "permno", "ff49"]].merge(lagged, on=["date", "ff49"], how="left")
-team = sp[["date", "permno", "conditional_signal"]].rename(
-    columns={"conditional_signal": "team_cs"}
-)
 cmp = panel[["date", "permno", "conditional_signal"]].merge(team, on=["date", "permno"], how="left")
 differs = ~np.isclose(cmp["conditional_signal"], cmp["team_cs"], equal_nan=True)
 lag_fix = pd.DataFrame([{
@@ -163,7 +170,7 @@ lag_fix = pd.DataFrame([{
 }])
 lag_fix.to_csv(RESULTS / "p4_calendar_lag_check.csv", index=False)
 print(lag_fix.to_string(index=False))
-del sp, sp_b, fwd, frame, q1, cmp, team, differs, fp
+del q1, cmp, team, differs, fp
 gc.collect()
 
 # ----------------------------------------------------------------- panel

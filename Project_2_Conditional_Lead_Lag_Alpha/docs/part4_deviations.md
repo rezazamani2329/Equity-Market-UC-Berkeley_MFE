@@ -20,6 +20,17 @@ the final run.
 | 9 | The timing decomposition compares open-to-close and overnight with close-to-close on the same stocks (those with an opening print). | Otherwise close-to-close includes stale-price days that neither leg covers. | Presentation only. |
 | 10 | The neutrality check imputes a missing stock beta at its industry-day mean, as the construction does. | The first check counted a missing beta as 0. Beta coverage is 100%, so it made no difference here. | None on this data. |
 
+## After Part 3's timing fix
+
+Part 3 fixed its timing after Part 4's results were in (commit 1c1544b: `lag=0`, so the
+leader's move on t is scored against the return on t+1). Reconciliation row 2 of the
+pre-registration targets the first version (0.56 bp/day, t 0.67). The reconciliation now
+reproduces both: the corrected Part 3 gives 3.36 bp/day (t 3.91) for `leader_ret_lag` and
+2.98 bp/day (t 3.72) for `conditional_signal`, and the first version still gives 0.56 and
+−0.12 bp/day. Pre-registered row 3 is dropped, since the corrected Part 3 row now plays that
+role. Convention B is no longer Part 3's timing and is kept only as a one-session-late
+check. No Part 4 result changes: the books do not use Part 3's output.
+
 ## Exploratory analysis (not pre-registered)
 
 `scripts/explore_part4_constraints.py` adds the industry-book constraints one at a time
