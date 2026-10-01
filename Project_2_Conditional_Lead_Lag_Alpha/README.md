@@ -1,642 +1,256 @@
-# Project 1 — Hull–White Calibration and REMIC Bond Pricing
+# Project 2 — Conditional Lead-Lag Alpha
 
-## MFE 230M — Asset Securitization
+**A risk-constrained long-short equity strategy built on industry lead-lag effects**
+UC Berkeley MFE · Equity Markets · 1996–2024 CRSP daily data
 
-This project calibrates a one-factor Hull–White interest-rate model to market prices of SOFR caps and then applies the calibrated model to price mortgage-backed REMIC securities from **Freddie Mac Multiclass Certificate Series 5310**.
-
-The project connects four important topics in securitized fixed income:
-
-- term-structure modeling,
-- mortgage prepayment behavior,
-- Monte Carlo valuation,
-- option-adjusted spread (OAS) analysis.
+> **Bottom line.** Large-cap industry leaders do predict their smaller followers' next-day returns, and that predictability comes from the **common (industry/market) part** of the leader's move, not the leader-specific shock. But the effect is concentrated in 1996–2006, the proposed conditional signal does not beat simpler baselines, and once the portfolio is made dollar-, beta- and own-lag-neutral, traded from the open, and charged realistic costs, nothing is left. **Verdict: do not implement.**
 
 ---
 
-# Project Objective
+## Contents
 
-The project has two main parts.
-
-### Part 1 — Hull–White Calibration
-
-Calibrate the one-factor Hull–White short-rate model
-
-\[
-dr(t) = [\theta(t)-\kappa r(t)]dt+\sigma dW(t)
-\]
-
-to **15 at-the-money backward-looking SOFR caps** with maturities from 1 to 30 years.
-
-The calibration requires:
-
-- SOFR cap strikes,
-- normal/Bachelier implied volatilities,
-- caplet accrual and payment dates,
-- discount factors,
-- Bloomberg cap prices.
-
-The goal is to estimate:
-
-\[
-\kappa,\qquad \sigma,\qquad \theta(t)
-\]
-
-and reproduce the market term structure as closely as possible.
-
-### Part 2 — Freddie Mac REMIC Pricing
-
-Use the calibrated Hull–White model to price the two Group 3 securities from **Freddie Mac REMIC Series 5310**:
-
-- **FB — Floater**
-- **SB — Inverse Floater**
-
-The valuation incorporates stochastic interest rates, refinancing incentives, mortgage prepayments, principal amortization, security cash flows, Monte Carlo simulation, antithetic variance reduction, and OAS estimation.
+1. [Research question and hypotheses](#1-research-question-and-hypotheses)
+2. [Data and universe](#2-data-and-universe)
+3. [Part 1 — Baseline lead-lag](#3-part-1--baseline-lead-lag)
+4. [Part 2 — Decomposing the leader's move](#4-part-2--decomposing-the-leaders-move)
+5. [Part 3 — Conditional signal and validation](#5-part-3--conditional-signal-and-validation)
+6. [Part 4 — Portfolio construction, risk and costs](#6-part-4--portfolio-construction-risk-and-costs)
+7. [Summary of findings](#7-summary-of-findings)
+8. [Reproducing the results](#8-reproducing-the-results)
+9. [Repository structure](#9-repository-structure)
 
 ---
 
-# Repository Structure
-
-The project folder is organized as follows:
-
-```text
-project 1/
-│
-├── Data/
-│   ├── cap_sofr_atm_..._20230413.csv
-│   ├── cap_sofr_atm_..._20230413.csv
-│   ├── P_caplet_accr..._20230413.csv
-│   ├── P_caplet_pay..._20230413.csv
-│   ├── REMIC_5310_Template.xlsx
-│   ├── sofr_cap_accr..._20230413.csv
-│   └── sofr_cap_bloo..._20230413.csv
-│
-├── Figures/
-│   ├── fig_1d_bachelier_vs_bbg.png
-│   ├── fig_1e_hw_vs_bachelier.png
-│   └── fig_1f_theta.png
-│
-├── notebooks/
-│   └── MFE230M_HW1_Group3.py
-│
-├── others/
-│   ├── MFE230M_Homework_Set_1_2026.pdf
-│   ├── MFE230M_HW1_Group3_writeup.docx
-│   ├── REMIC_5310_Prospectus.pdf
-│   └── sample_output.txt
-│
-└── README.md
-```
-
-> The exact CSV filenames may differ slightly from the abbreviated names displayed by Finder.
-
----
-
-# Project Workflow
-
-The overall workflow is:
-
-```text
-Market Data
-    │
-    ▼
-SOFR Curve + Cap Volatilities + Bloomberg Cap Prices
-    │
-    ▼
-Bachelier Cap Pricing
-    │
-    ▼
-Hull–White Calibration
-    │
-    ├── κ
-    ├── σ
-    └── θ(t)
-    │
-    ▼
-Monte Carlo Short-Rate Simulation
-    │
-    ▼
-Simulated 10-Year Refinancing Rate
-    │
-    ▼
-Mortgage Prepayment Model
-    │
-    ▼
-REMIC Collateral Cash Flows
-    │
-    ▼
-Floater / Inverse Floater Cash Flows
-    │
-    ▼
-Bond Prices + Standard Errors
-    │
-    ▼
-Option-Adjusted Spread Analysis
-```
-
----
-
-# 1. Hull–White Calibration
-
-## 1.1 Accrual Periods
-
-SOFR caplet accrual periods follow the ACT/360 convention:
-
-\[
-\tau_i =
-\frac{D_i^{Acc}-D_{i-1}^{Acc}}{360}.
-\]
-
-The resulting quarterly accrual periods are approximately 0.25 years.
-
----
-
-## 1.2 Forward SOFR Rates
-
-Quarterly forward SOFR rates are calculated from the initial discount curve:
-
-\[
-F_i^{SOFR}
-=
-\frac{1}{\tau_i}
-\left(
-\frac{P_{i-1}^{Acc}}{P_i^{Acc}}-1
-\right).
-\]
+## 1. Research question and hypotheses
 
-A total of **120 forward SOFR rates** are generated over the 30-year horizon.
+When a dominant large-cap stock moves, should smaller firms in the same industry **continue** in the same direction (slow information diffusion), or **reverse** when the leader's move was specific to the leader rather than news about the industry?
 
-The forward curve begins near 4.98% and declines toward approximately 2.6% at longer maturities.
+| # | Hypothesis | Tested in | Outcome |
+|---|---|---|---|
+| H1 | Followers **continue** on the common (industry/market) component of the leader's move | Parts 2–3 | ✅ Supported |
+| H2 | Followers **revert** on the leader-specific shock | Parts 2–3 | ❌ Not supported |
+| H3 | Conditioning on the source of the move beats unconditional signals and short-term reversal | Parts 3–4 | ❌ Rejected |
+| H4 | The signal stays economically meaningful after risk controls, turnover and costs | Part 4 | ❌ Rejected |
 
----
+## 2. Data and universe
 
-## 1.3 Proxy Option Expiry
+| Item | Detail |
+|---|---|
+| Source | CRSP daily stock file, delistings, name history, Fama-French 5 factors + momentum (via WRDS); Databento intraday quotes (pilot) |
+| Sample | 1996–2024; 34.4M CRSP rows; 7,173 trading sessions |
+| Industries | Fama-French 49, assigned **point-in-time** from CRSP name history (not header SIC) |
+| Universe | Monthly, 5 screens (observation count, $5 price floor, NYSE size floor, liquidity, excluding industry "Other"): **~1,747 eligible stocks per month** on average |
+| Leaders / followers | Leader = largest firm in each industry, chosen with data through month *m−1*; all other eligible firms are followers (5.4% monthly leader turnover) |
+| Regression panel | **12.4M follower-days** |
+| Survivorship | Delisting returns merged in (incl. non-trading days); Shumway substitute for 417 missing performance delistings, flagged |
+| Look-ahead controls | Every conditioning characteristic is taken at the previous close (the "d−1 rule"); `(date, permno)` uniqueness enforced |
 
-For each backward-looking caplet, the volatility is scaled using the proxy time
+Licensed data (CRSP extracts, stock-level panels) is **not** in this repository; everything is regenerated from code (see [§8](#8-reproducing-the-results)). Only aggregate result tables are committed.
 
-\[
-T_i^{1/3}
-=
-\hat T_{i-1}^{Acc}
-+
-\frac{
-\hat T_i^{Acc}-\hat T_{i-1}^{Acc}
-}{3}.
-\]
+<p align="center">
+  <img src="figures/p1_universe_attrition.png" width="48%">
+  <img src="figures/p1_stocks_per_year.png" width="48%">
+</p>
 
-This proxy accounts for the timing structure of the backward-looking SOFR caplets.
+## 3. Part 1 — Baseline lead-lag
 
----
+**Model.** Daily Fama-MacBeth cross-sectional regressions of follower returns on the industry leader's lagged return, controlling for the follower's own lagged return, with Newey-West standard errors (pooled, date-clustered estimates as a check):
 
-# 2. Bachelier Cap Pricing
+$$r_{i,t} = a_t + b_t\, r_{L(i),\,t-k} + c_t\, r_{i,\,t-k} + \varepsilon_{i,t}$$
 
-Each caplet is first priced with the Bachelier normal-volatility model:
+**Results.**
 
-\[
-Caplet_i =
-\tau_i P_i^{Pmt}
-\left[
-(F_i-K)N(d_i)
-+
-\sigma_N \sqrt{T_i}n(d_i)
-\right],
-\]
+| Lag *k* | β (Fama-MacBeth) | t | β (pooled, clustered) | t |
+|---|---|---|---|---|
+| 1 | +0.00928 | **5.03** | +0.02202 | 6.84 |
+| 2 | +0.00122 | 0.72 | +0.01199 | 3.84 |
+| 3 | −0.00050 | −0.30 | +0.00207 | 0.64 |
 
-where
+- **The effect is continuation, not reversal**, and lasts one day. A quintile sort on the leader's lagged return is monotone, with a top-minus-bottom spread of **3.59 bps/day (t = 4.34)**.
+- **It is concentrated in 1996–2006:** β = 0.0206 (t = 7.97) then, versus 0.0025 (t = 1.02) in 2007–2024, as median relative spreads fell from 3.23% to 0.11%.
+- **It is not bid-ask bounce:** rebuilt on bid-ask midpoint returns, β = 0.00963 (t = 5.19), essentially unchanged.
 
-\[
-d_i =
-\frac{F_i-K}
-{\sigma_N\sqrt{T_i}}.
-\]
+| Return measure (lag 1) | β_FM | t | 1996–2006 | 2007–2024 |
+|---|---|---|---|---|
+| Close-to-close | 0.00928 | 5.03 | 0.0206 (t 7.97) | 0.0025 (t 1.02) |
+| Close, ex-dividend | 0.00912 | 4.96 | 0.0206 (t 7.97) | 0.0022 (t 0.92) |
+| **Bid-ask midpoint** | **0.00963** | **5.19** | **0.0220 (t 8.12)** | 0.0022 (t 0.93) |
 
-Each cap price is obtained by summing its component caplets.
+<p align="center">
+  <img src="figures/p1_coefficient_by_year.png" width="48%">
+  <img src="figures/p1_quintile_sort.png" width="48%">
+</p>
+<p align="center">
+  <img src="figures/p1_horizon_profile.png" width="60%">
+</p>
 
-## Validation Result
+An intraday pilot (Databento 5-minute midpoints, June 2023, 22 stocks) validated the pipeline but was not significant (β = −0.044, t = −1.67). Details: `docs/STATUS.md`, `docs/part1_handoff.md`.
 
-The implementation reproduces Bloomberg cap prices very closely:
+## 4. Part 2 — Decomposing the leader's move
 
-- pricing differences are **below 0.10% across all 15 maturities**,
-- the maximum dollar difference is approximately **$2,170** for the 30-year cap on a $10 million notional.
+**Model.** Each day, split the leader's return into a **common** part explained by the market and an **ex-leader** industry index, and a **leader-specific** residual. The regression is rolling and point-in-time, and the industry index excludes the leader so the residual is not shrunk toward zero:
 
-This provides a useful validation of the market inputs and Bachelier implementation before the Hull–White calibration.
+$$r_{L,t} = \alpha + \beta_m\, \text{MKT}_t + \beta_j\, \text{IND}^{\text{ex-leader}}_{j,t} + u_{L,t}, \qquad \text{common}_t = r_{L,t} - u_{L,t}, \quad \text{shock}_t = u_{L,t}$$
 
-The comparison is shown in:
+Followers' responses to each component are then estimated with Fama-MacBeth regressions:
 
-```text
-Figures/fig_1d_bachelier_vs_bbg.png
-```
+$$r_{i,t} = a_t + b_c\, \text{common}_{t-k} + b_u\, \text{shock}_{t-k} + c\, r_{i,t-k} + \varepsilon_{i,t}$$
 
----
+**Results (lag 1, Fama-MacBeth).**
 
-# 3. Hull–White Parameter Estimation
+| Coefficient | Estimate | t |
+|---|---|---|
+| b_common | **0.0396** | **7.70** |
+| b_shock | 0.0034 | 1.86 |
+| b_common − b_shock | 0.0362 | 6.90 |
 
-The Hull–White parameters are estimated using nonlinear least squares:
+- Followers respond strongly to the **common** component and barely to the leader-specific shock, which supports **H1**.
+- The shock coefficient is **positive**, the wrong sign for the reversal in **H2**.
+- On average the common component explains only about **40%** of a leader's daily variance (median across 48 industries: 38%). So the predictability comes from the smaller share of the move.
 
-\[
-\min_{\kappa,\sigma}
-\sqrt{
-\sum_{i=1}^{15}
-\left(
-Cap_i^{Bachelier}
--
-Cap_i^{HW}(\kappa,\sigma)
-\right)^2
-}.
-\]
+<p align="center">
+  <img src="figures/p2_common_vs_shock.png" width="48%">
+  <img src="figures/part2_variance_shares.png" width="48%">
+</p>
 
-## Calibrated Parameters
+Additional diagnostics in `figures/`: horizon profile (`part2_horizon_profile.png`), rolling betas (`part2_rolling_betas.png`), sign flip (`part2_sign_flip.png`), recovery (`part2_recovery.png`), ex-leader scatter (`part2_exleader_scatter.png`), leader robustness (`part2_leader_robustness.png`).
 
-| Parameter | Result |
-|---|---:|
-| Mean-reversion speed \(\kappa\) | **0.072395** |
-| Short-rate volatility \(\sigma\) | **0.012861** |
-| Volatility | **128.61 bp** |
-| Initial short rate \(r_0\) | **4.9861%** |
+## 5. Part 3 — Conditional signal and validation
 
-The cap-price calibration RMSE is approximately:
+**Signal.** One rankable number per follower-day, combining H1 and H2:
 
-\[
-\boxed{\$33,554}
-\]
+$$\text{conditional\_signal} = \text{common\_lag} - \text{shock\_lag}$$
 
-for a $10 million cap notional.
+Each leg is also tested alone, against two baselines: the unconditional Part 1 leader signal (`leader_ret_lag`) and naive own-return reversal (`−own_lag`).
 
-The calibration was stable across different optimizer starting values.
+**Validation.** Daily cross-sectional Spearman rank IC at horizons of 1, 5, 10 and 20 days, plus equal-weighted quintile long-short portfolios at h = 1. The signal is known at day *t*'s close and tested on the return from *t* to *t+1*.
 
-The model fit is shown in:
+**Results (h = 1).**
 
-```text
-Figures/fig_1e_hw_vs_bachelier.png
-```
+| Signal | Mean IC | IC t-stat | Long-short (bps/day) | Long-short t-stat |
+|---|---|---|---|---|
+| Composite (common − shock) | 0.0010 | 0.93 | 3.0 | 3.72 |
+| **Common leg** | **0.0049** | **3.52** | **7.1** | **6.76** |
+| Shock leg (raw sign) | 0.0007 | 0.72 | 0.5 | 0.76 |
+| Part 1 baseline (leader return) | 0.0021 | 1.87 | 3.4 | 3.91 |
+| Naive own-return reversal | 0.0166 | 10.91 | 3.8 | 3.23 |
 
----
+- The **common leg** is the strongest leader-based signal: it doubles the Part 1 baseline's spread.
+- The **shock leg** is flat, so subtracting it **dilutes** the composite, which falls below both baselines. H3 is rejected.
+- Naive reversal leads on IC, but its spread is about half the common leg's, and its top quintile is the most volatile (consistent with small, illiquid stocks).
 
-# 4. Estimating the Hull–White Drift
+<p align="center">
+  <img src="figures/p3_ic_by_horizon.png" width="90%">
+</p>
+<p align="center">
+  <img src="figures/p3_quintile_monotonicity.png" width="95%">
+</p>
 
-The monthly time-dependent drift is estimated using
+> **Timing correction.** An earlier version tested the signal with a two-day gap (the leader's move on *t−1* against the return on *t+1*), which made it look like noise (composite −0.12 bps/day, t −0.16). Commit `1c1544b` fixed this (`lag=0`); all Part 3 numbers above are corrected. Parts 1, 2 and 4 were not affected. Report: `Conditional_Lead_Lag_Alpha_Report.pdf`.
 
-\[
-\theta(t)
-=
-\frac{\partial f(0,t)}{\partial t}
-+
-\kappa f(0,t)
-+
-\frac{\sigma^2}{2\kappa}
-\left(
-1-e^{-2\kappa t}
-\right).
-\]
+## 6. Part 4 — Portfolio construction, risk and costs
 
-The instantaneous forward curve \(f(0,t)\) is obtained from the fitted initial discount curve.
+Everything below follows a **pre-registration** written before any Part 4 result (`docs/part4_prereg.md`). Changes after an independent code audit are listed in `docs/part4_deviations.md`; none changes the verdict.
 
-The estimated \(\theta(t)\) curve is shown in:
+**Construction.**
+- **Industry books** (`conditional_signal`, `common_lag`; appendix: `leader_ret_lag`, `shock_lag`): each day, rank industries by the signal and demean the ranks. Then project out dollar, market-beta and own-lag exposure, split each industry's weight equally across its followers, and scale gross exposure to 1.
+- **Reversal benchmark:** stock-level ranks of `−own_lag`, made dollar-, industry- and beta-neutral.
+- **Beta:** Dimson (1979) over 252 sessions, shrunk halfway to 1.
+- **Signal timing:** the leader's move is lagged one session on the trading calendar, using only information to the close of *t−1*.
 
-```text
-Figures/fig_1f_theta.png
-```
+**Holding conventions.**
 
----
+| | Holding period | Role |
+|---|---|---|
+| **C** | open *t* → close *t* | **Headline** (implementable with market-on-open orders) |
+| A | close *t−1* → close *t* | Upper bound (requires trading at the signal's own close) |
+| Overnight | close *t−1* → open *t* | Decomposition |
 
-# 5. Freddie Mac REMIC Series 5310
+**Primary tests** (annualized mean, Newey-West t, Holm-corrected):
 
-The second part of the project applies the calibrated Hull–White model to Group 3 of Freddie Mac REMIC Series 5310.
+| Book | Convention | Ann. mean | t | Holm p |
+|---|---|---|---|---|
+| conditional_signal | C | −0.46% | −1.08 | 0.28 |
+| conditional_signal | A | −0.70% | −1.48 | 0.28 |
+| common_lag | C | +0.85% | 1.90 | 0.17 |
+| common_lag | A | +1.19% | 2.39 | 0.07 |
 
-## Group 3 Collateral
+**Decision rule** (all three needed for the headline book):
 
-| Characteristic | Value |
-|---|---:|
-| Initial principal | **$66,534,768** |
-| Weighted-average maturity | **357 months** |
-| Weighted-average coupon | **7.42%** |
-| Servicing fee | **0.92%** |
-| Net collateral coupon | **6.50%** |
+| Criterion | Result | Passed |
+|---|---|---|
+| 1. Mean return > 0, Holm p < 0.05 | −0.46%/yr, Holm p = 0.28 | ❌ |
+| 2. Spanning alpha > 0 vs. reversal book (open-to-close market) | −0.46%/yr, p = 0.29 | ❌ |
+| 3. Breakeven cost > median half-spread (2007–2024) | −0.09 bp vs. 2.58 bp | ❌ |
+| **Verdict** | | **DO NOT IMPLEMENT** |
 
-The underlying deal information is contained in:
+**Costs.** Every leader-based book breaks even at **0.17 bp or less** one-way, against a median half-spread of **2.58 bp**: more than an order of magnitude short. The reversal book reaches 0.50 bp under C.
 
-```text
-Data/REMIC_5310_Template.xlsx
-others/REMIC_5310_Prospectus.pdf
-```
+**What removes the return?** In an exploratory, non-pre-registered analysis that adds the constraints one at a time, `common_lag` earns 4.6%/yr (t 5.6) open-to-close when only dollar-neutral, but just 0.9%/yr (t 1.9) once it is also beta- and own-lag-neutral. Much of the raw signal is market-beta and own-return exposure, not new information.
 
----
+**Timing.**
+- Convention C cannot capture the overnight leg. For the common leg in 2007–2024, close-to-close and open-to-close are similar (about 0.75% vs 0.7%/yr), and the overnight part has almost vanished.
+- The reversal book's large close-to-close return (10.1%/yr) shrinks to 1.9%/yr on midpoint returns, so most of it is bid-ask bounce.
 
-# 6. Securities Priced
+**Risk.**
+- The headline book runs at only **2.3%** annual volatility. A 10% volatility target would need 4.3× leverage, so the 3× cap binds and the scaled book realizes 6.7%.
+- 99% historical VaR is **rejected** by the Kupiec test (99 exceedances vs. 69 expected): the tails are fatter than a trailing window captures.
+- Stress periods: Aug 2007 +0.6%, Sep–Oct 2008 +0.5%, Mar 2020 −2.4% (headline book, C).
 
-## Floater — FB
+<p align="center">
+  <img src="figures/p4_cumulative.png" width="48%">
+  <img src="figures/p4_drawdown.png" width="48%">
+</p>
+<p align="center">
+  <img src="figures/p4_timing_decomposition.png" width="95%">
+</p>
 
-The floater:
+Report: `report/Part4_Portfolio_Construction_and_Risk.pdf`.
 
-- receives all Group 3 collateral principal,
-- pays floating interest based on approximately
+## 7. Summary of findings
 
-\[
-SOFR + 0.95\%.
-\]
+1. **Lead-lag exists:** leaders' returns predict followers' next-day returns (β = 0.0093, t = 5.03). It is continuation, not reversal, and not bid-ask bounce.
+2. **It is fading:** almost all of it is in 1996–2006 and statistically absent after 2007.
+3. **The information is in the common component:** followers respond to the industry/market part of the leader's move (t = 7.70), not to the leader-specific shock.
+4. **The proposed conditional signal fails:** the shock leg adds noise, so the composite underperforms the plain common leg and both baselines.
+5. **It is not tradable:** after neutralizing beta and own-lag, trading from the open, and charging realistic costs, every leader-based book earns less than a tenth of its trading cost.
 
-Its coupon is subject to the available collateral interest.
+## 8. Reproducing the results
 
-## Inverse Floater — SB
-
-The inverse floater is a **notional interest-only security**.
-
-Its coupon is approximately
-
-\[
-5.55\%-SOFR.
-\]
-
-Because the floater and inverse floater divide the available Group 3 interest, their values react very differently to interest-rate movements.
-
----
-
-# 7. Monte Carlo Simulation
-
-Monthly short-rate paths are simulated from the calibrated Hull–White model:
-
-\[
-r_{t+\Delta t}
-=
-r_t
-+
-[\theta(t)-\kappa r_t]\Delta t
-+
-\sigma\sqrt{\Delta t}Z_t.
-\]
-
-Simulation setup:
-
-- **10,000 total interest-rate paths**
-- **5,000 antithetic pairs**
-- **357 monthly periods**
-- Hull–White calibrated \(\kappa\), \(\sigma\), and \(\theta(t)\)
-
-For each path, the model generates a simulated 10-year rate that serves as the refinancing rate used in the mortgage prepayment model.
-
----
-
-# 8. Mortgage Prepayment Model
-
-The model begins with a **250% PSA** baseline.
-
-Monthly prepayment probability is modeled as
-
-\[
-q_t =
-\lambda_t e^{\beta x_t},
-\]
-
-where
-
-\[
-\lambda_t
-=
-1-(1-CPR_t)^{1/12},
-\]
-
-and
-
-\[
-CPR_t =
-2.5\times0.2\%
-\times
-\min(\text{Pool Age},30).
-\]
-
-The refinancing incentive is
-
-\[
-x_t =
-\text{Mortgage WAC}
--
-\text{Simulated 10Y Rate}_t.
-\]
-
-The sensitivity parameter is
-
-\[
-\beta=0.38089.
-\]
-
-Therefore:
-
-\[
-\text{Interest Rates}\downarrow
-\quad\Rightarrow\quad
-\text{Refinancing Incentive}\uparrow
-\quad\Rightarrow\quad
-\text{Prepayments}\uparrow.
-\]
-
-This creates the path dependency that is central to mortgage-backed-security valuation.
-
----
-
-# 9. Cash-Flow Process
-
-For every simulated interest-rate path, the program:
-
-1. simulates the short rate,
-2. calculates the corresponding 10-year refinancing rate,
-3. determines the refinancing incentive,
-4. calculates mortgage prepayments,
-5. re-amortizes the mortgage collateral,
-6. distributes collateral principal to the floater,
-7. computes floater interest,
-8. computes inverse-floater interest,
-9. discounts all security cash flows,
-10. averages discounted cash flows across Monte Carlo paths.
-
-This converts simulated interest-rate scenarios into security-level valuations.
-
----
-
-# 10. Main REMIC Results
-
-| Security | Coupon | Price | Standard Error |
-|---|---|---:|---:|
-| **Floater (FB)** | SOFR + 0.95% | **101.5037** | **0.006743** |
-| **Inverse Floater (SB)** | 5.55% − SOFR | **2.9138** | **0.004608** |
-
-Combined value:
-
-\[
-\boxed{FB+SB=104.4175}
-\]
-
-The average principal returned to the floater is equal to the initial Group 3 collateral principal:
-
-\[
-\boxed{\$66,534,768}.
-\]
-
----
-
-# 11. Antithetic Variance Reduction
-
-To improve Monte Carlo efficiency, every vector of random shocks \(Z\) is paired with \(-Z\).
-
-The pair estimator is
-
-\[
-Y_i =
-\frac12
-\left[
-PV(Z_i)+PV(-Z_i)
-\right].
-\]
-
-Results:
-
-| Security | Antithetic SE | Benchmark SE | Pair Correlation | Variance Reduction |
-|---|---:|---:|---:|---:|
-| **Floater** | 0.006743 | 0.006445 | +0.095 | ~0% |
-| **Inverse Floater** | 0.004608 | 0.010381 | −0.803 | ~80% |
-
-### Interpretation
-
-Antithetic variates work extremely well for the inverse floater because its value is approximately monotonic in interest rates.
-
-For the floater, however, coupon collars, changing mortgage prepayments, and principal timing make the payoff less monotonic. As a result, antithetic sampling provides little variance reduction.
-
----
-
-# 12. Option-Adjusted Spread
-
-A constant spread \(s\) is added to simulated discounting:
-
-\[
-DF_s(t)
-=
-DF(t)e^{-st}.
-\]
-
-The OAS is obtained by solving
-
-\[
-Price(s)=Market\ Price.
-\]
-
-Assuming a market price of 100:
-
-| Security | Implied OAS |
-|---|---:|
-| **Floater (FB)** | **+76 bp** |
-| **Inverse Floater (SB)** | **≈ −6,271 bp** |
-
-### Interpretation
-
-The floater has a zero-OAS model value above par, so a positive discount spread is required to reduce the model value to 100.
-
-The inverse floater is a notional IO security with a zero-OAS value of approximately 2.91. Treating 100 as its market price therefore produces an economically extreme OAS and demonstrates why OAS must be interpreted carefully for non-standard securities.
-
----
-
-# 13. Key Findings
-
-The project highlights several important principles of asset securitization and fixed-income modeling:
-
-### Interest-rate models must be calibrated to market instruments
-
-SOFR cap prices provide market information for estimating the parameters of the Hull–White model.
-
-### Mortgage securities are path dependent
-
-Interest-rate movements affect refinancing incentives, which affect mortgage prepayments and therefore the timing of principal and interest.
-
-### Security structure changes risk exposure
-
-The floater and inverse floater receive cash flows from the same mortgage collateral but have dramatically different interest-rate sensitivities.
-
-### Variance reduction is security dependent
-
-Antithetic variates reduced the inverse-floater simulation variance by roughly **80%**, but provided little benefit for the floater.
-
-### OAS requires economic interpretation
-
-A mathematically computed spread is not automatically an economically meaningful relative-value measure, especially for notional IO securities.
-
----
-
-# 14. How to Run
-
-The main Python program is:
-
-```text
-notebooks/MFE230M_HW1_Group3.py
-```
-
-From the project directory, run:
+Use a dedicated **Python 3.12** environment. Do not install into a shared base environment: `wrds` pins an older pandas, which can break other projects.
 
 ```bash
-python notebooks/MFE230M_HW1_Group3.py
+uv venv .venv --python 3.12
+uv pip install --python .venv/bin/python -r requirements.txt
+[ -f .env ] || cp .env.example .env    # only if you have no .env yet; then add WRDS_USERNAME / WRDS_PASSWORD
+.venv/bin/python scripts/run_part1.py  # ~45 min first run (pulls CRSP into cache.nosync/), ~4 min after
+.venv/bin/python scripts/run_part2.py
+.venv/bin/python scripts/run_part3.py
+.venv/bin/python scripts/make_p3_figures.py
+.venv/bin/python scripts/prep_part4.py
+.venv/bin/python scripts/run_part4.py
+PYTHONPATH=src:tests .venv/bin/python -m pytest -q   # offline unit tests on a synthetic panel
 ```
 
-The script reads the required market and REMIC inputs from the `Data/` directory and produces the numerical results and figures used in the analysis.
+WRDS access is required. `cache.nosync/` and `results/*.parquet` hold licensed data and must never be committed. `scripts/sync_to_team_repo.sh` publishes from a private working copy with an explicit allow-list.
 
-> If your current Python script expects the data files in the same directory rather than `Data/`, update the relative paths before publishing the repository.
+## 9. Repository structure
 
----
-
-# 15. Output
-
-The project generates:
-
-```text
-Figures/fig_1d_bachelier_vs_bbg.png
-Figures/fig_1e_hw_vs_bachelier.png
-Figures/fig_1f_theta.png
 ```
-
-A representative text output is stored in:
-
-```text
-others/sample_output.txt
-```
-
----
-
-# 16. Implementation Tools
-
-The project is implemented in Python and uses numerical techniques including:
-
-- NumPy / pandas data processing
-- Bachelier normal cap pricing
-- Hull–White zero-coupon bond option pricing
-- nonlinear least-squares optimization
-- term-structure interpolation
-- Monte Carlo simulation
-- antithetic variance reduction
-- mortgage prepayment modeling
-- REMIC cash-flow modeling
-- numerical OAS solving
-
----
-
-# 17. Course Context
-
-**Course:** MFE 230M — Asset Securitization  
-**Program:** Master of Financial Engineering  
-**Project:** Project 1 — Hull–White Calibration and REMIC Bond Pricing
-
-This project demonstrates the link between **interest-rate derivatives, term-structure modeling, mortgage behavior, structured-product cash flows, Monte Carlo valuation, and fixed-income relative-value analysis**.
-
----
-
-## Notes on Data
-
-Some files used in this project may contain instructor-provided or Bloomberg-derived data. Before making the repository public, verify that redistribution of these files is permitted.
-
-If redistribution is restricted, the recommended public repository structure is:
-
-```text
-project 1/
+Project_2_Conditional_Lead_Lag_Alpha/
 ├── README.md
-├── notebooks/
-│   └── MFE230M_HW1_Group3.py
-├── Figures/
-└── others/
-    └── sample_output.txt
+├── Conditional_Lead_Lag_Alpha_Report.pdf      # Part 3 report
+├── report/Part4_Portfolio_Construction_and_Risk.pdf
+├── docs/
+│   ├── STATUS.md                # Part 1 status, data guarantees, open issues
+│   ├── part1_handoff.md         # artefacts, guarantees, pitfalls
+│   ├── part4_prereg.md          # Part 4 pre-registration
+│   └── part4_deviations.md      # post-audit changes
+├── src/lead_lag/                # data, baseline, shocks, signals, portfolio
+├── scripts/                     # run_part1-4, figure and data-prep scripts
+├── tests/                       # unit tests (synthetic panel)
+├── notebooks/                   # part1_data_universe, part2_shock_decomposition
+├── results/                     # aggregate CSV tables (p1_*, p2_*, p3_*, p4_*)
+├── figures/                     # all figures used above
+└── appendix/                    # supporting material and ChatGPT interactions
 ```
-
-with proprietary or restricted raw data excluded through `.gitignore`.
