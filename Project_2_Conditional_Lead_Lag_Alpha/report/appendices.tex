@@ -1,0 +1,82 @@
+% ============================================================================
+\clearpage
+\appendix
+\section{Additional Tables and Figures}\label{app:tables}
+% ============================================================================
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.92\textwidth]{p4_cumulative.png}
+\caption{Cumulative return of the gross-1 books; the dotted line marks 2007.}\label{fig:cumulative}
+\end{figure}
+
+
+
+All code, result tables, figures and transcripts are in the project
+repository:\\
+\url{https://github.com/rezazamani2329/Equity-Market-UC-Berkeley_MFE/tree/main/Project_2_Conditional_Lead_Lag_Alpha}.
+Table~\ref{tab:index} lists the result tables and figures by part. The design
+documents are \file{docs/part4\_prereg.md} (pre-registration) and
+\file{docs/part4\_deviations.md} (changes after the code audit).
+
+\begin{table}[h]
+\centering\footnotesize
+\caption{Result tables and figures in the repository.}\label{tab:index}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.17\textwidth}YY@{}}
+\toprule
+Part & Tables (\file{results/}) & Figures (\file{figures/}) \\
+\midrule
+1. Data and baseline & \file{p1\_horizon\_profile.csv}, \file{p1\_coefficient\_by\_year.csv}, \file{p1\_bounce\_check.csv}, \file{p1\_universe\_attrition.csv} & \file{p1\_coefficient\_by\_year.png}, \file{p1\_quintile\_sort.png}, \file{p1\_horizon\_profile.png} \\
+2. Shock decomposition & \file{p2\_conditional\_response\_horizon.csv}, \file{p2\_variance\_shares.csv} & \file{p2\_common\_vs\_shock.png}, \file{part2\_variance\_shares.png}, \file{part2\_leader\_robustness.png} \\
+3. Signal validation & \file{p3\_horizon\_ic.csv}, \file{p3\_quintile\_spread\_h1.csv} & \file{p3\_ic\_by\_horizon.png}, \file{p3\_quintile\_monotonicity.png} \\
+4. Portfolio and risk & \file{p4\_performance.csv}, \file{p4\_primary\_tests.csv}, \file{p4\_attribution.csv}, \file{p4\_costs.csv}, \file{p4\_var\_backtest.csv}, \file{p4\_stress.csv}, \file{p4\_decision.csv} & \file{p4\_cumulative.png}, \file{p4\_drawdown.png}, \file{p4\_timing\_decomposition.png} \\
+5. Robustness & \file{p5\_net\_of\_cost.csv}, \file{p5\_yearly\_returns.csv}, \file{p5\_subperiods.csv}, \file{p5\_decision.csv} & \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\clearpage
+% ============================================================================
+\section{Code}\label{app:code}
+% ============================================================================
+
+Each part has one script that regenerates its tables,
+\file{scripts/run\_part1.py} to \file{run\_part5.py}, on the package in
+\file{src/lead\_lag/}. The Part 5 cost calculation, from the Part 4 daily book
+returns:
+
+\begin{Verbatim}[fontsize=\footnotesize,frame=single,framesep=6pt]
+# src/lead_lag/robustness/costs.py
+ROUND_TRIP = 2.0  # traded notional per day of a gross-1 book that is flat overnight
+
+def net_of_cost(gross, traded, cost_bp):
+    """Daily return after a one-way cost of `cost_bp` basis points."""
+    return gross - traded * cost_bp / 1e4
+
+# scripts/run_part5.py: open-to-close books trade ROUND_TRIP x gross each day;
+# close-to-close books are charged their realised turnover.
+traded = {"C": ROUND_TRIP, "A": wide[(book, "turnover_carry")]}
+s = summary_stats(net_of_cost(gross, traded[conv], cost))  # ann. mean, Newey-West t
+\end{Verbatim}
+
+The industry-book weights, from
+\file{src/lead\_lag/portfolio/construction.py}: rank the industries on the
+signal, demean, project out a constant, the industry's average follower beta
+and its average previous-day follower return, split each industry's weight
+equally across its followers, and scale to gross exposure 1.
+
+% ============================================================================
+\clearpage
+\section{ChatGPT Interactions}\label{app:chatgpt}
+% ============================================================================
+
+The three interactions as recorded in the repository, in the files
+\file{appendix/chatgpt\_p4.md} and \file{appendix/chatgpt\_p5.md}: exact prompts,
+summaries, critical evaluation, and the full outputs.
+\sloppy
+
+\input{appendix_chatgpt_p4.tex}
+
+\clearpage
+\input{appendix_chatgpt_p5.tex}
+

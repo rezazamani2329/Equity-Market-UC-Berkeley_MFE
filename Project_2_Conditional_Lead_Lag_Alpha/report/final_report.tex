@@ -1,0 +1,494 @@
+% ============================================================================
+%  Conditional Lead-Lag Alpha -- Final Report (MFE 230GA)
+%  Compile twice (for cross-references) with pdfLaTeX or LuaLaTeX, e.g.
+%      pdflatex final_report.tex && pdflatex final_report.tex
+%  On Overleaf: upload this folder plus the two figures and press Recompile.
+%  This file holds the preamble and Sections 1-3. The appendices are in
+%  appendices.tex (which pulls in appendix_chatgpt_p4.tex and _p5.tex).
+%  Figures are read from ../figures/ (or figures/ or this folder).
+% ============================================================================
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[utf8]{inputenc}
+  \usepackage[T1]{fontenc}
+  \usepackage{lmodern}
+\else
+  \usepackage{fontspec}   % LuaLaTeX / XeLaTeX: Latin Modern is the default font
+\fi
+\usepackage{newunicodechar}
+\usepackage[margin=1in,headheight=14pt]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{comment}
+\usepackage[breakable]{tcolorbox}
+\usepackage{booktabs,longtable,array,tabularx,calc}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{fvextra}
+\usepackage{xurl}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{../figures/}{figures/}{./}}
+
+% ----------------------------------------------------------------------------
+%  TITLE BLOCK -- edit these four lines
+% ----------------------------------------------------------------------------
+\newcommand{\reporttitle}{Conditional Lead-Lag Alpha}
+\newcommand{\reportcourse}{MFE 230GA: Equity Markets --- Final Report}
+\newcommand{\reportdate}{October 2026}
+\newcommand{\reportauthors}{%
+  Elias Roubache \and      % Part 1: data and universe
+  Connor O'Rourke \and     % Part 2: shock identification
+  Reza Zamani \and         % Part 3: signal and validation
+  Thomas Claudel \and      % Part 4: portfolio and risk
+  Paraj Goyal}             % Part 5: robustness and final report
+
+% ----------------------------------------------------------------------------
+%  RUNNING HEADER AND FOOTER
+% ----------------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\reporttitle}
+\fancyhead[R]{\small MFE 230G Final Project}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{\textbf{\reporttitle}}
+\author{\reportauthors}
+\date{\reportcourse\\[0.2em]\reportdate}
+% ----------------------------------------------------------------------------
+
+% -- layout ------------------------------------------------------------------
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\setlength{\emergencystretch}{3em}
+\setlist{itemsep=0.15em,topsep=0.2em,leftmargin=1.4em}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\titlespacing*{\section}{0pt}{1.1em}{0.4em}
+\titlespacing*{\subsection}{0pt}{0.8em}{0.25em}
+\titleformat{\paragraph}{\normalfont\normalsize\bfseries}{}{0pt}{}
+\titlespacing*{\paragraph}{0pt}{0.7em}{0.15em}
+\titleformat{\subparagraph}{\normalfont\normalsize\itshape}{}{0pt}{}
+\titlespacing*{\subparagraph}{0pt}{0.6em}{0.1em}
+\setcounter{secnumdepth}{2}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\file}[1]{\texttt{\small #1}}
+
+% -- needed by the converted ChatGPT transcripts -----------------------------
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\footnotesize}
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{Σ}{\ensuremath{\Sigma}}
+\newunicodechar{−}{\ensuremath{-}}
+\newunicodechar{⁻}{\ensuremath{{}^{-}}}
+\newunicodechar{⁺}{\ensuremath{{}^{+}}}
+\newunicodechar{¹}{\ensuremath{{}^{1}}}
+\newunicodechar{ᵀ}{\ensuremath{{}^{\top}}}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{√}{\ensuremath{\surd}}
+\newunicodechar{÷}{\ensuremath{\div}}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+% ============================================================================
+\section{Executive Summary}
+% ============================================================================
+
+\textbf{Do not implement.} We proposed a conditional lead-lag strategy on US
+stocks: each day, split the return of every industry's largest stock (the
+``leader'') into a part shared with the market and industry and a part specific
+to the leader, then buy followers after common moves and sell them after
+leader-specific moves. On CRSP daily data for 1996--2024, leaders do predict
+their followers' next-day returns (coefficient 0.0093, $t = 5.03$), but the
+result does not support the strategy. The effect is continuation rather than
+reversal, it is confined to 1996--2006, and followers do not revert on the
+leader-specific shock, so the conditional signal is weaker than its own common
+leg. Built as a dollar-, beta- and own-lag-neutral book traded open to close,
+the conditional signal earns $-0.46\%$ a year ($t = -1.08$). The best
+leader-based book earns $0.85\%$ a year before costs and breaks even at a
+one-way cost of 0.17~bp, against a median quoted half-spread of 2.58~bp. Paying
+that half-spread turns every book's return into a loss of 10\% to 13\% a year.
+
+% ============================================================================
+\section{What Did We Try?}
+% ============================================================================
+
+\subsection{Ideas}
+
+The idea starts from industry lead-lag: large firms' returns predict the later
+returns of smaller firms in the same industry, usually read as slow diffusion
+of information. We asked whether the direction of the follower's response
+depends on why the leader moved. If the leader moves with its industry,
+followers should continue in the same direction. If the move is specific to the
+leader, followers that are dragged along should revert. That gave four
+hypotheses (Table~\ref{tab:hyp}). The strategy that follows from H1 and H2 is
+one number per follower per day: the common part of the leader's previous-day
+return minus the leader-specific part.
+
+\begin{table}[h]
+\centering\small
+\caption{Hypotheses and outcomes.}\label{tab:hyp}
+\begin{tabularx}{\textwidth}{@{}lYll@{}}
+\toprule
+ & Hypothesis & Tested in & Outcome \\
+\midrule
+H1 & Followers continue on the common (market and industry) part of the leader's move & Parts 2--3 & Supported \\
+H2 & Followers revert on the leader-specific shock & Parts 2--3 & Not supported \\
+H3 & Conditioning on the source of the move beats the unconditional leader signal and plain short-term reversal & Parts 3--4 & Rejected \\
+H4 & The signal stays economically meaningful after risk controls, turnover and costs & Parts 4--5 & Rejected \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Data}
+
+All results use CRSP daily data for 1996--2024, pulled through WRDS, with no
+survivorship or look-ahead bias by construction (Table~\ref{tab:data}). The
+size screen removes the most stocks (56\% fail it on its own), then the price
+screen (24\%). Licensed stock-level data is not in the public repository; every
+table regenerates from code.
+
+\begin{table}[h]
+\centering\small
+\caption{Data and universe.}\label{tab:data}
+\begin{tabularx}{\textwidth}{@{}lY@{}}
+\toprule
+Item & Detail \\
+\midrule
+Sources & CRSP daily stock file, delistings and name history; Fama-French five factors and momentum (Ken French Data Library, via WRDS); Databento one-minute quotes for an intraday pilot \\
+Sample & 1996--2024, 34.4 million CRSP rows, 7,173 trading sessions \\
+Industries & Fama-French 49, assigned point-in-time from CRSP name history, with ``Other'' excluded (48 used) \\
+Universe & Monthly, five screens: observation count, \$5 price floor, NYSE size floor, liquidity, industry not ``Other''. About 1,747 eligible stocks a month \\
+Leaders, followers & Leader = largest firm in each industry using data through the previous month; all other eligible firms are followers. Monthly leader turnover is 5.4\% \\
+Panel & 12.4 million follower-days \\
+Survivorship & Delisting returns merged in; Shumway's substitute for 417 missing performance delistings \\
+Look-ahead control & Every conditioning variable is taken at the previous close \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Implementation}
+
+The work ran in five steps, each built on the previous one's code, with unit
+tests on a synthetic panel with a planted effect.
+
+\textbf{Baseline (Part 1).} Daily Fama-MacBeth regressions of follower returns
+on the leader's lagged return, controlling for the follower's own lagged
+return, with Newey-West standard errors:
+\[
+r_{i,t} = a_t + b_t\, r_{L(i),\,t-k} + c_t\, r_{i,\,t-k} + \varepsilon_{i,t}.
+\]
+
+\textbf{Shock decomposition (Part 2).} Each day the leader's return is
+regressed, on a rolling point-in-time window, on the market and an industry
+index that excludes the leader. The fitted part is the common component; the
+residual is the leader-specific shock:
+\[
+r_{L,t} = \alpha + \beta_m\, \mathrm{MKT}_t + \beta_j\,
+\mathrm{IND}^{\text{ex-leader}}_{j,t} + u_{L,t}, \qquad
+\mathrm{common}_t = r_{L,t} - u_{L,t}, \quad \mathrm{shock}_t = u_{L,t}.
+\]
+On average the common component explains about 40\% of a leader's daily
+variance.
+
+\textbf{Signal and validation (Part 3).} The conditional signal is the lagged
+common component minus the lagged shock. It is scored by daily cross-sectional
+rank IC at horizons of 1, 5, 10 and 20 days and by quintile long-short
+portfolios, against two baselines: the unconditional leader return and the
+follower's own-return reversal.
+
+\textbf{Portfolio and risk (Part 4).} The design was written down before any
+result was computed.
+\begin{itemize}
+\item \textbf{Construction.} The leader signals take one value per industry,
+  so the real breadth is 48 industries. Each day industries are ranked on the
+  signal and the ranks are made neutral to dollar, market beta and the
+  industry's own previous-day return. Each industry's weight is split equally
+  across its followers, at gross exposure 1.
+\item \textbf{Risk modeling.} Betas are Dimson betas over 252 sessions, shrunk
+  halfway to one. Books are sized by gross exposure and realized volatility;
+  there is no full factor risk model. Risk is measured by drawdown, 99\%
+  historical VaR with Kupiec backtests, and three stress periods.
+\item \textbf{Timing.} The headline book is formed from information at the
+  previous close, bought at the open and sold at the same day's close.
+  Close-to-close is reported as an upper bound.
+\item \textbf{Turnover and costs.} An open-to-close book is flat overnight, so
+  it trades twice its gross exposure every day. Costs are measured as the
+  one-way cost at which a book's return is zero, compared with the median
+  quoted half-spread of the stocks held.
+\item \textbf{Decision rule.} Implement only if the conditional book has a
+  significantly positive mean after Holm correction, a positive alpha after
+  controlling for factors and the reversal book, and a breakeven cost above
+  the median half-spread.
+\end{itemize}
+
+\textbf{Robustness (Part 5).} Net-of-cost returns at a range of one-way costs,
+year-by-year and sub-period returns, and midpoint-price checks, all computed
+from the Part 4 daily book returns.
+
+\textbf{ChatGPT prompts.} We used ChatGPT three times (Table~\ref{tab:prompts}).
+Full prompts, outputs and our evaluation are in Appendix~\ref{app:chatgpt}.
+
+\begin{table}[h]
+\centering\small
+\caption{ChatGPT prompts, in short.}\label{tab:prompts}
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}p{0.27\textwidth}Y@{}}
+\toprule
+\# & Purpose & Prompt \\
+\midrule
+1 & Robustness design (Part 4) & ``List every way this backtest could show a profit that would not survive in real trading, or that is not the effect I think I am measuring,'' with a detection method and fix for each \\
+2 & Portfolio construction and coding (Part 4) & Propose a dollar-, beta- and own-lag-neutral construction for a signal shared within an industry, a risk model, a sizing rule, and Python for the weights \\
+3 & Cost, microstructure and out-of-sample design (Part 5) & Given the turnover and breakeven numbers, propose a cost model, rank the microstructure effects that could create or hide the return, say which out-of-sample tests still count, and state in advance what would overturn ``do not implement'' \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ============================================================================
+\section{What Did We Learn?}
+% ============================================================================
+
+\subsection{The signal, and its style and risk factor exposures}
+
+\textbf{The lead-lag effect is real, but it is not the one we proposed.}
+Followers respond to the common part of the leader's move (coefficient 0.0396,
+$t = 7.70$) and barely to the leader-specific part (0.0034, $t = 1.86$), and
+that response has the wrong sign for H2. Subtracting a leg with no reversal
+from a leg that works cuts the rank IC from 0.0049 ($t = 3.52$) for the common
+leg to 0.0010 ($t = 0.93$) for the conditional signal, below both baselines, so
+H3 is rejected (Table~\ref{tab:evidence}).
+
+\begin{table}[h]
+\centering\small
+\caption{One-day evidence from Parts 1--3.}\label{tab:evidence}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Test (one-day lag) & Estimate & $t$ \\
+\midrule
+Part 1: follower return on leader's lagged return & 0.0093 & 5.03 \\
+Part 2: response to common component & 0.0396 & 7.70 \\
+Part 2: response to leader-specific shock & 0.0034 & 1.86 \\
+Part 3: rank IC, conditional signal & 0.0010 & 0.93 \\
+Part 3: rank IC, common leg alone & 0.0049 & 3.52 \\
+Part 3: rank IC, own-return reversal & 0.0166 & 10.91 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{The books carry almost no standard factor exposure.} In regressions on
+the Fama-French five factors, momentum and the lagged market, $R^2$ is below
+2\% for every lead-lag book and no Fama-French or momentum loading is
+significant. The exposures that matter are the ones the construction removes.
+\begin{itemize}
+\item \textbf{Market beta.} Beta neutrality alone takes the conditional signal
+  from 1.9\% a year ($t = 3.0$) to $-0.3\%$ ($t = -0.6$), close to close. The
+  common component contains yesterday's market move, so ranking industries on
+  it is largely a bet that high-beta industries keep moving with the market.
+\item \textbf{Industry momentum.} Across industries the common leg has a
+  correlation of 0.63 with the followers' own previous-day return, because the
+  industry index is built from those followers. With all three constraints the
+  common leg falls from 6.6\% a year to 1.2\%.
+\item \textbf{Short-term reversal.} The common, shock and leader-return books
+  load negatively on the reversal book ($t$ between $-2.4$ and $-4.9$).
+\end{itemize}
+
+\begin{table}[h]
+\centering\small
+\caption{Gross-1 books, open to close, 1996--2024. Newey-West $t$-statistics with 5 lags.}\label{tab:perf}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Book & Return / yr & Volatility / yr & Sharpe & $t$ & Max drawdown \\
+\midrule
+Conditional signal    & $-0.46\%$ & 2.3\% & $-0.20$ & $-1.08$ & $-16.6\%$ \\
+Common leg            & $0.85\%$  & 2.4\% & $0.35$  & $1.90$  & $-7.6\%$ \\
+Leader return         & $0.79\%$  & 2.3\% & $0.34$  & $1.80$  & $-8.1\%$ \\
+Leader-specific shock & $0.77\%$  & 2.3\% & $0.34$  & $1.78$  & $-6.5\%$ \\
+Reversal benchmark    & $2.52\%$  & 3.2\% & $0.78$  & $3.70$  & $-45.7\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+None of the four pre-registered primary tests is significant after Holm
+correction (Table~\ref{tab:perf}). The shock book earns a positive return under
+every set of constraints, so followers continue on the leader-specific shock
+instead of reverting. Tail risk is understated by a trailing window: one-day
+99\% VaR from a 250-day history is breached 96 to 115 times against about 69
+expected, and the Kupiec test rejects for every book. The conditional book's
+worst stress period is March 2020 ($-2.4\%$).
+
+\subsection{Time patterns of performance}
+
+\textbf{The effect belongs to 1996--2006, and the conditional book loses money
+in every long window.} In the Part 1 regression the one-day coefficient is
+0.0206 ($t = 7.97$) in 1996--2006 and 0.0025 ($t = 1.02$) in 2007--2024, while
+the median relative spread fell from 3.23\% to 0.11\%
+(Figure~\ref{fig:byyear}).
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.62\textwidth]{p1_coefficient_by_year.png}
+\caption{Part 1 lead-lag coefficient by year (annual mean of the pooled-regression coefficient on the leader's prior-day return).}\label{fig:byyear}
+\end{figure}
+
+\begin{table}[h]
+\centering\footnotesize
+\caption{Return per year, open to close, with the Newey-West $t$-statistic in brackets. The data end in December 2024, so the last 18 months are July 2023 to December 2024.}\label{tab:windows}
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+Book & 1996--2024 & 1996--2006 & 2007--2024 & 2010--2024 & Last 18 m & Last 12 m \\
+\midrule
+Conditional signal & $-0.5\%$ ($-1.1$) & $-0.4\%$ ($-0.7$) & $-0.5\%$ ($-0.9$) & $-0.7\%$ ($-1.3$) & $0.3\%$ ($0.2$) & $0.5\%$ ($0.3$) \\
+Common leg         & $0.8\%$ ($1.9$) & $1.1\%$ ($1.6$) & $0.7\%$ ($1.2$) & $1.0\%$ ($1.6$) & $-2.2\%$ ($-1.3$) & $-1.3\%$ ($-0.6$) \\
+Leader return      & $0.8\%$ ($1.8$) & $1.1\%$ ($1.6$) & $0.6\%$ ($1.1$) & $0.9\%$ ($1.5$) & $-1.8\%$ ($-1.2$) & $-1.5\%$ ($-0.8$) \\
+Reversal benchmark & $2.5\%$ ($3.7$) & $3.0\%$ ($2.5$) & $2.2\%$ ($2.8$) & $1.9\%$ ($2.3$) & $-0.2\%$ ($-0.1$) & $-2.1\%$ ($-0.9$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The common and leader-return books lose money over the last 18 months
+(Table~\ref{tab:windows}). Those windows are short: an 18-month Sharpe ratio
+has a standard error of about 0.8, so they are descriptive only. Year by year,
+the conditional book is positive in 12 of 29 calendar years and the common leg
+in 19 of 29. Cumulative returns are in Figure~\ref{fig:cumulative}.
+
+\subsection{Robustness and limits}
+
+\textbf{Every check confirms ``do not implement''.} Before running them
+we fixed the rule: the verdict is overturned only if a book keeps a positive
+return after paying the median quoted half-spread with zero market impact, the
+most favourable cost case. No book comes close.
+
+\textbf{Transaction costs.} An open-to-close book trades twice its gross each
+day, so each basis point of one-way cost removes about 5 percentage points of
+annual return (Table~\ref{tab:costs}).
+
+\begin{table}[h]
+\centering\small
+\caption{Net return per year, open to close, 2007--2024, by one-way cost. The last column is the median quoted half-spread of the stocks held.}\label{tab:costs}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+Book & No cost & 0.1 bp & 0.5 bp & 1 bp & 2.58 bp \\
+\midrule
+Conditional signal    & $-0.5\%$ & $-1.0\%$ & $-3.0\%$ & $-5.5\%$ & $-13.5\%$ \\
+Common leg            & $0.7\%$  & $0.2\%$  & $-1.8\%$ & $-4.3\%$ & $-12.3\%$ \\
+Leader return         & $0.6\%$  & $0.1\%$  & $-1.9\%$ & $-4.4\%$ & $-12.4\%$ \\
+Leader-specific shock & $0.8\%$  & $0.3\%$  & $-1.7\%$ & $-4.3\%$ & $-12.2\%$ \\
+Reversal benchmark    & $2.2\%$  & $1.7\%$  & $-0.3\%$ & $-2.8\%$ & $-10.8\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Carrying positions overnight lowers turnover to about 1.3 a day, but the
+leader-based close-to-close books still lose 7\% to 9\% a year at the median
+half-spread. The cost case is weaker still in 1996--2006, where the gross
+return is highest: Part 1 reports a median relative spread of 3.23\% at the
+start of the sample against 0.11\% at the end, about thirty times wider.
+Market impact, fees and short-borrow costs would add to these losses and are
+not modelled.
+
+\textbf{Microstructure.}
+\begin{itemize}
+\item \textbf{Bid-ask bounce does not drive the lead-lag effect.} On bid-ask
+  midpoint returns the Part 1 coefficient is 0.0096 ($t = 5.19$) against 0.0093
+  ($t = 5.03$) on closing prices. The conditional book earns $-0.78\%$ a year
+  on midpoints against $-0.70\%$ on closes.
+\item \textbf{Bounce does drive the reversal benchmark.} Close to close it
+  earns 10.1\% a year, on midpoints 1.9\%, and in 1996--2006 it loses 1.0\% a
+  year on midpoints. About 7.5 of its 10.1 points arrive overnight, which a
+  trader cannot capture.
+\item \textbf{Stale prices are not ruled out.} Trading from the open excludes
+  the overnight catch-up of stale closes, and the leader-based books' return
+  falls by 30\% to 50\% as a result. A direct test needs intraday quotes, which
+  we hold only for 2018--2024, when the effect is already absent. A one-month
+  pilot on 22 stocks was not significant ($t = -1.67$).
+\end{itemize}
+
+\textbf{Out-of-sample.} No holdout was reserved and the whole 1996--2024 sample
+was examined during development, so every split is pseudo-out-of-sample.
+Selected on 1996--2006 and evaluated on 2007--2024, the common leg earns 0.7\%
+a year ($t = 1.2$) and the conditional signal $-0.5\%$ ($t = -0.9$): no
+leader-based book is significant in the later period even before costs
+(Table~\ref{tab:oos}). A genuine out-of-sample test needs data after December
+2024 with the specification locked; we have not run one.
+
+\begin{table}[h]
+\centering\small
+\caption{Pseudo-out-of-sample split, open to close: return per year (Newey-West $t$).}\label{tab:oos}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Book & Selected on 1996--2006 & Evaluated on 2007--2024 \\
+\midrule
+Conditional signal & $-0.4\%$ ($t = -0.7$) & $-0.5\%$ ($t = -0.9$) \\
+Common leg         & $1.1\%$ ($t = 1.6$)   & $0.7\%$ ($t = 1.2$) \\
+Leader return      & $1.1\%$ ($t = 1.6$)   & $0.6\%$ ($t = 1.1$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Limits.}
+\begin{itemize}
+\item Books are sized by gross exposure and realized volatility; there is no
+  factor risk model, and the industry books rest on about 48 independent bets
+  a day.
+\item Costs use closing quoted spreads. Opening and closing auction costs are
+  not measured, and Nasdaq's auctions began only in 2004, inside the period
+  that produces the return.
+\item The Fama-French factors exist only close to close, so the open-to-close
+  attribution is approximate beyond the market factor.
+\item Long and short legs separately, profit concentration by industry, and
+  leave-one-industry-out tests need stock-level weights and were not run.
+\end{itemize}
+
+\subsection{ChatGPT evaluation}
+
+\textbf{ChatGPT was a strong checklist and a weak judge of what matters for
+this dataset.} We used it three times, to review the backtest design, the
+portfolio construction and the robustness plan (Table~\ref{tab:gpt}).
+
+\begin{table}[h]
+\centering\small
+\caption{The three ChatGPT interactions.}\label{tab:gpt}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{0.22\textwidth}YY@{}}
+\toprule
+Interaction & Most useful & Main flaw \\
+\midrule
+1. False-profit checklist & Saw unprompted that the signal is industry allocation and a market-beta bet & Moved the trade a full session late, where every book earns nothing \\
+2. Construction and risk model & Agreed on the constraints; called a diagonal risk model inadequate & Weighted industries by follower count, a problem it had itself flagged \\
+3. Cost and out-of-sample design & Made the spread-only test the deciding case; stricter out-of-sample labels & Ranked bounce first, though Part 1 had ruled it out \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Strengths.} It lists failure modes quickly and thoroughly, it reasons
+correctly from numbers it is given, and it is candid about what a dataset
+cannot identify. In the third interaction, supplying the turnover and
+breakeven numbers fixed the first interaction's weakness, where it could only
+say that costs ``might be decisive''.
+
+\textbf{Limits.} It cannot rank its own list: the items that decide the result
+sit among dozens that do not apply or were already handled. It follows the
+prompt's framing even when the framing is the mistake, as with the execution
+time. Its code needs checking: one answer lost the start of its function,
+another included the same day's return in the volatility that sizes that
+day's cost.
+
+\textbf{Adaptations.} We learned to state facts and ask for the earliest
+feasible choice instead of stating a choice, to supply our own numbers, to ask
+for a ranking and for what does not apply, and to ask for pass/fail rules
+before running a test. The pattern matches HW1 and HW2: good at saying what
+could go wrong, weak at saying which of those things matters here.
+
+% ============================================================================
+%  APPENDICES (separate file)
+% ============================================================================
+\input{appendices.tex}
+
+\end{document}

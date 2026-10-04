@@ -15,9 +15,10 @@ UC Berkeley MFE · Equity Markets · 1996–2024 CRSP daily data
 4. [Part 2 — Decomposing the leader's move](#4-part-2--decomposing-the-leaders-move)
 5. [Part 3 — Conditional signal and validation](#5-part-3--conditional-signal-and-validation)
 6. [Part 4 — Portfolio construction, risk and costs](#6-part-4--portfolio-construction-risk-and-costs)
-7. [Summary of findings](#7-summary-of-findings)
-8. [Reproducing the results](#8-reproducing-the-results)
-9. [Repository structure](#9-repository-structure)
+7. [Part 5 — Robustness](#7-part-5--robustness)
+8. [Summary of findings](#8-summary-of-findings)
+9. [Reproducing the results](#9-reproducing-the-results)
+10. [Repository structure](#10-repository-structure)
 
 ---
 
@@ -30,7 +31,7 @@ When a dominant large-cap stock moves, should smaller firms in the same industry
 | H1 | Followers **continue** on the common (industry/market) component of the leader's move | Parts 2–3 | ✅ Supported |
 | H2 | Followers **revert** on the leader-specific shock | Parts 2–3 | ❌ Not supported |
 | H3 | Conditioning on the source of the move beats unconditional signals and short-term reversal | Parts 3–4 | ❌ Rejected |
-| H4 | The signal stays economically meaningful after risk controls, turnover and costs | Part 4 | ❌ Rejected |
+| H4 | The signal stays economically meaningful after risk controls, turnover and costs | Parts 4–5 | ❌ Rejected |
 
 ## 2. Data and universe
 
@@ -45,7 +46,7 @@ When a dominant large-cap stock moves, should smaller firms in the same industry
 | Survivorship | Delisting returns merged in (incl. non-trading days); Shumway substitute for 417 missing performance delistings, flagged |
 | Look-ahead controls | Every conditioning characteristic is taken at the previous close (the "d−1 rule"); `(date, permno)` uniqueness enforced |
 
-Licensed data (CRSP extracts, stock-level panels) is **not** in this repository; everything is regenerated from code (see [§8](#8-reproducing-the-results)). Only aggregate result tables are committed.
+Licensed data (CRSP extracts, stock-level panels) is **not** in this repository; everything is regenerated from code (see [§9](#9-reproducing-the-results)). Only aggregate result tables are committed.
 
 <p align="center">
   <img src="figures/p1_universe_attrition.png" width="48%">
@@ -207,15 +208,61 @@ Everything below follows a **pre-registration** written before any Part 4 result
 
 Report: `report/Part4_Portfolio_Construction_and_Risk.pdf`.
 
-## 7. Summary of findings
+## 7. Part 5 — Robustness
+
+Part 5 asks whether the Part 4 verdict survives explicit costs, sub-period splits and midpoint prices. It runs on Part 4's committed daily book returns (`results/p4_portfolio_daily.csv`), so it needs no licensed data. The pass/fail rule was fixed before the numbers were run (`appendix/chatgpt_p5.md`): the verdict is overturned only if a book keeps a positive net return at the 2007–2024 median half-spread with **zero market impact**, the most favourable cost case.
+
+**Transaction costs.** A convention-C book trades twice its gross every day, so each basis point of one-way cost removes about 5 percentage points of annual return.
+
+Net return per year, convention C, 2007–2024:
+
+| Book | No cost | 0.1 bp | 0.5 bp | 1 bp | **2.58 bp** (median half-spread) |
+|---|---|---|---|---|---|
+| conditional_signal | −0.5% | −1.0% | −3.0% | −5.5% | **−13.5%** |
+| common_lag | +0.7% | +0.2% | −1.8% | −4.3% | **−12.3%** |
+| leader_ret_lag | +0.6% | +0.1% | −1.9% | −4.4% | **−12.4%** |
+| shock_lag | +0.8% | +0.3% | −1.7% | −4.3% | **−12.2%** |
+| reversal | +2.2% | +1.7% | −0.3% | −2.8% | **−10.8%** |
+
+- **No book passes.** At the median half-spread every book loses between 10.8% and 13.5% a year. Carried close-to-close (convention A, turnover about 1.3 a day), the leader-based books still lose 7% to 9% a year.
+- Market impact, fees and borrow costs are not modelled; they would only add to the losses.
+
+**Microstructure.**
+- **Bounce does not drive the lead-lag books.** The headline book earns −0.78%/yr on midpoint returns against −0.70%/yr on closes (convention A), in line with Part 1's midpoint regression.
+- **Bounce does drive the reversal benchmark:** 10.1%/yr on closes, 1.9%/yr on midpoints, and −1.0%/yr on midpoints in 1996–2006. About 7.5 of its 10.1 points arrive overnight.
+- **Non-synchronous trading is not cleared.** A direct test needs the intraday quotes, which cover only 2018–2024, when the effect is already absent.
+
+**Out-of-sample.** No holdout was reserved in 1996–2024, so every split is **pseudo-out-of-sample** and labelled as such.
+
+| Book (convention C) | 1996–2006 | 2007–2024 | Positive calendar years |
+|---|---|---|---|
+| conditional_signal | −0.4% (t −0.7) | −0.5% (t −0.9) | 12 of 29 |
+| common_lag | +1.1% (t 1.6) | +0.7% (t 1.2) | 19 of 29 |
+| leader_ret_lag | +1.1% (t 1.6) | +0.6% (t 1.1) | 18 of 29 |
+
+No leader-based book is significant in 2007–2024 even before costs. A genuine out-of-sample test needs data after December 2024 with the specification locked; it has not been run.
+
+| Criterion (every book, convention C, 2007–2024) | Result | Passed |
+|---|---|---|
+| Net return > 0 at the median half-spread, zero impact | −10.8% to −13.5%/yr | ❌ |
+| **Verdict** | | **DO NOT IMPLEMENT** (confirmed) |
+
+**Not run** (these need the stock-level panel): long and short legs separately, P&L concentration by industry and leader, leave-one-industry-out, and an impact stress by capital level.
+
+Tables: `results/p5_net_of_cost.csv`, `p5_yearly_returns.csv`, `p5_subperiods.csv`, `p5_decision.csv`. ChatGPT interactions: `appendix/chatgpt_p4.md`, `appendix/chatgpt_p5.md`.
+
+Final report: `report/Conditional_Lead_Lag_Alpha_Final_Report.pdf`.
+
+## 8. Summary of findings
 
 1. **Lead-lag exists:** leaders' returns predict followers' next-day returns (β = 0.0093, t = 5.03). It is continuation, not reversal, and not bid-ask bounce.
 2. **It is fading:** almost all of it is in 1996–2006 and statistically absent after 2007.
 3. **The information is in the common component:** followers respond to the industry/market part of the leader's move (t = 7.70), not to the leader-specific shock.
 4. **The proposed conditional signal fails:** the shock leg adds noise, so the composite underperforms the plain common leg and both baselines.
 5. **It is not tradable:** after neutralizing beta and own-lag, trading from the open, and charging realistic costs, every leader-based book earns less than a tenth of its trading cost.
+6. **The verdict is robust:** paying the median half-spread with zero impact, every book loses 10.8% to 13.5% a year, and no leader-based book is significant in 2007–2024 even before costs.
 
-## 8. Reproducing the results
+## 9. Reproducing the results
 
 Use a dedicated **Python 3.12** environment. Do not install into a shared base environment: `wrds` pins an older pandas, which can break other projects.
 
@@ -229,28 +276,32 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python scripts/make_p3_figures.py
 .venv/bin/python scripts/prep_part4.py
 .venv/bin/python scripts/run_part4.py
+.venv/bin/python scripts/run_part5.py  # needs only results/p4_*.csv, no WRDS cache
 PYTHONPATH=src:tests .venv/bin/python -m pytest -q   # offline unit tests on a synthetic panel
 ```
 
 WRDS access is required. `cache.nosync/` and `results/*.parquet` hold licensed data and must never be committed. `scripts/sync_to_team_repo.sh` publishes from a private working copy with an explicit allow-list.
 
-## 9. Repository structure
+## 10. Repository structure
 
 ```
 Project_2_Conditional_Lead_Lag_Alpha/
 ├── README.md
 ├── Conditional_Lead_Lag_Alpha_Report.pdf      # Part 3 report
-├── report/Part4_Portfolio_Construction_and_Risk.pdf
+├── report/
+│   ├── Conditional_Lead_Lag_Alpha_Final_Report.pdf   # final report (all parts) + appendices
+│   ├── final_report.tex, appendices.tex, appendix_chatgpt_p*.tex   # its LaTeX source
+│   └── Part4_Portfolio_Construction_and_Risk.pdf
 ├── docs/
 │   ├── STATUS.md                # Part 1 status, data guarantees, open issues
 │   ├── part1_handoff.md         # artefacts, guarantees, pitfalls
 │   ├── part4_prereg.md          # Part 4 pre-registration
 │   └── part4_deviations.md      # post-audit changes
-├── src/lead_lag/                # data, baseline, shocks, signals, portfolio
-├── scripts/                     # run_part1-4, figure and data-prep scripts
+├── src/lead_lag/                # data, baseline, shocks, signals, portfolio, robustness
+├── scripts/                     # run_part1-5, figure and data-prep scripts
 ├── tests/                       # unit tests (synthetic panel)
 ├── notebooks/                   # part1_data_universe, part2_shock_decomposition
-├── results/                     # aggregate CSV tables (p1_*, p2_*, p3_*, p4_*)
+├── results/                     # aggregate CSV tables (p1_*, p2_*, p3_*, p4_*, p5_*)
 ├── figures/                     # all figures used above
 └── appendix/                    # supporting material and ChatGPT interactions
 ```
