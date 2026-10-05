@@ -282,6 +282,13 @@ Part 3: rank IC, own-return reversal & 0.0166 & 10.91 \\
 \end{tabular}
 \end{table}
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\textwidth]{p2_common_vs_shock.png}
+\includegraphics[width=0.48\textwidth]{p3_ic_by_horizon.png}
+\caption{Left: followers' response to the leader's common vs.\ leader-specific component (Part 2) --- this is the matching of a follower's return to the part of the leader's move it is tested against. Right: rank IC of each candidate signal by horizon (Part 3).}\label{fig:common-ic}
+\end{figure}
+
 \textbf{The books carry almost no standard factor exposure.} In regressions on
 the Fama-French five factors, momentum and the lagged market, $R^2$ is below
 2\% for every lead-lag book and no Fama-French or momentum loading is
@@ -315,6 +322,13 @@ Reversal benchmark    & $2.52\%$  & 3.2\% & $0.78$  & $3.70$  & $-45.7\%$ \\
 \end{tabular}
 \end{table}
 
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\textwidth]{p1_quintile_sort.png}
+\includegraphics[width=0.48\textwidth]{p4_drawdown.png}
+\caption{Left: quintile buy/sell spread on the leader's lagged return (Part 1) --- long the top quintile, short the bottom. Right: drawdown of the gross-1 portfolio books (Part 4).}\label{fig:quintile-drawdown}
+\end{figure}
+
 None of the four pre-registered primary tests is significant after Holm
 correction (Table~\ref{tab:perf}). The shock book earns a positive return under
 every set of constraints, so followers continue on the leader-specific shock
@@ -335,6 +349,12 @@ the median relative spread fell from 3.23\% to 0.11\%
 \centering
 \includegraphics[width=0.62\textwidth]{p1_coefficient_by_year.png}
 \caption{Part 1 lead-lag coefficient by year (annual mean of the pooled-regression coefficient on the leader's prior-day return).}\label{fig:byyear}
+\end{figure}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.62\textwidth]{p1_horizon_profile.png}
+\caption{Part 1 lead-lag trend across lags: the coefficient on the leader's return falls from lag 1 to lag 3 and beyond, confirming the effect is one-day and not a slower multi-day drift.}\label{fig:horizon}
 \end{figure}
 
 \begin{table}[h]
@@ -410,6 +430,13 @@ not modelled.
   we hold only for 2018--2024, when the effect is already absent. A one-month
   pilot on 22 stocks was not significant ($t = -1.67$).
 \end{itemize}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\textwidth]{p4_timing_decomposition.png}
+\includegraphics[width=0.48\textwidth]{p3_quintile_monotonicity.png}
+\caption{Left: portfolio timing decomposition (Part 4) --- open-to-close, overnight and close-to-close legs of the headline book. Right: signal quintile portfolios at the one-day horizon (Part 3), the buy (top quintile) vs.\ sell (bottom quintile) spread the headline book is built from.}\label{fig:timing-quintile}
+\end{figure}
 
 \textbf{Out-of-sample.} No holdout was reserved and the whole 1996--2024 sample
 was examined during development, so every split is pseudo-out-of-sample.
