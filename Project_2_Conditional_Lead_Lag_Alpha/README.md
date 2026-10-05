@@ -3,7 +3,7 @@
 A risk-constrained long-short equity strategy built on industry lead-lag effects.
 UC Berkeley MFE · Equity Markets (MFE 230G) · CRSP daily data, 1996–2024.
 
-**Team:** Elias Roubache (Part 1 — data), Connor O'Rourke (Part 2 — shock identification), Reza Zamani (Part 3 — signal and validation), Thomas Claudel (Part 4 — portfolio and risk), Paraj Goyal (Part 5 — robustness).
+**Team:** Elias Roubache, Connor O'Rourke, Reza Zamani, Thomas Claudel, Paraj Goyal.
 
 > **Bottom line.** Large-cap industry leaders do predict their smaller followers' next-day returns, and that predictability comes from the **common (industry/market) part** of the leader's move, not the leader-specific shock. But the effect is concentrated in 1996–2006, the proposed conditional signal does not beat simpler baselines, and once the portfolio is made dollar-, beta- and own-lag-neutral, traded from the open, and charged realistic costs, nothing is left.
 > **Verdict: do not implement.**
